@@ -122,7 +122,7 @@ if (update_model) {
   )
   
   (s <- sanity(m))
-  if (length(s[s == TRUE]) < 8) {
+  if (!s$all_ok) {
     
     spatiotemporal <- list("off", "iid")
     anisotropy <- FALSE
@@ -154,7 +154,7 @@ m
 
 (s <- sanity(m))
 
-if (length(s[s == TRUE]) < 8) {
+if (!s$all_ok) {
   update_index <- FALSE
   print("Model still not converging.")
 } else {
