@@ -193,7 +193,7 @@ if (update_index) {
     model_ssid <- c(16)
   }
 
-  if (survey == "Coast-wide trawl surveys") {
+  if (region == "Coast-wide trawl surveys") {
     nd <- readRDS(here::here("data-generated/nd_whole_coast_index.rds")) %>% mutate(cell_area = 4)
   }
 }
@@ -231,7 +231,7 @@ if (update_index) {
 
   i <- i %>% mutate(
     species = species,
-    survey = survey,
+    survey = region,
     surveys = paste(unique(positive_sets$survey_abbrev), collapse = ", "),
     ssids = paste(unique(positive_sets$survey_series_id), collapse = ", "),
     ssid_string = ssid_string,
