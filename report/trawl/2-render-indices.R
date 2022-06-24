@@ -25,8 +25,8 @@ render_separately <- function(...) callr::r(
 
 fit_index <- function(region, species) {
   spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
-  # name <- "with depth" # describe model covariates
-  name <- "no depth" # describe model covariates
+  name <- "with depth" # describe model covariates
+  # name <- "no depth" # describe model covariates
   region_name <- region
   try({
     render_separately("report/trawl/index-standardization.Rmd",
