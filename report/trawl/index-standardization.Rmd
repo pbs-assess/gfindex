@@ -1,0 +1,257 @@
+---
+title: "Trawl survey index standardization for `r paste(params$species)`"
+author: "Philina English"
+date: "`r Sys.Date()`"
+output: html_document
+params:
+    species: "Canary Rockfish"
+    survey: "SYN WCHG"
+    # survey: "Coast-wide trawl surveys"
+    # name: "no depth" # description used to name model rds
+    name: "with depth" 
+    # update_model: FALSE
+    anisotropy: TRUE
+    update_model: TRUE # will over write past models; will always attempt a model if none exists
+    update_index: TRUE
+    # update_index: FALSE
+    silent: TRUE
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 11, fig.height = 8.5,
+  echo = FALSE, warning = FALSE, message = FALSE
+)
+
+library(dplyr)
+library(ggplot2)
+library(sdmTMB)
+
+# options(scipen = 999)
+theme_set(
+  theme_bw(base_size = 14)
+)
+```
+
+```{r params}
+species <- params$species
+survey <- params$survey
+name <- gsub(" ", "-", gsub("\\/", "-", tolower(params$name)))
+update_model <- params$update_model
+update_index <- params$update_index
+
+paste("survey =", survey)
+paste("model type =", params$name)
+anisotropy <- params$anisotropy
+family <- delta_gamma()
+
+if (survey == "Coast-wide trawl surveys") {
+  survey <- c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG")
+}
+```
+
+Get species data 
+```{r}
+spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
+
+data <- readRDS("data/all-survey-sets-2021.rds") %>%
+  rename(survey_series_id = survey_series_id.x) %>%
+  filter(species_common_name == tolower(species)) %>%
+  filter(depth_m > 0)
+
+data$density <- data[["density_kgpm2"]] * 1000000 # change from per m2 to per km2
+data$log_depth <- log(data$depth_m)
+
+positive_sets <- data %>%
+  filter(density != 0) %>%
+  filter(survey_abbrev %in% survey)
+data <- data %>% filter(survey_abbrev %in% unique(positive_sets$survey_abbrev))
+ssid_string <- paste0(unique(data$survey_series_id), collapse = "n")
+# surv_string <- paste0(unique(data$survey_abbrev), collapse = ", ")
+data <- sdmTMB::add_utm_columns(data, c("longitude", "latitude"), utm_crs = 32609)
+```
+
+Make mesh
+```{r}
+# standard settings
+cutoff <- 10
+spatiotemporal <- "iid"
+
+if (survey %in% c("SYN WCHG")) {
+  cutoff <- 5
+}
+spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
+plot(spde)
+```
+
+```{r}
+# Check if a model already exists
+dir.create("models", showWarnings = FALSE)
+f <- paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds")
+if (file.exists(f)) {
+  m <- readRDS(f)
+} else {
+  update_model <- TRUE
+}
+```
+
+Run sdmTMB model
+
+```{r}
+if (update_model) {
+  update_index <- TRUE
+
+  if (name == "no-depth") {
+    formula <- density ~ 0 + as.factor(year)
+  } else {
+    if (name == "with-depth") {
+      formula <- density ~ 0 + as.factor(year)
+    }
+  }
+
+  m <- sdmTMB(
+    formula,
+    data,
+    mesh = spde,
+    time = "year",
+    family = family,
+    spatial = "on",
+    spatiotemporal = spatiotemporal,
+    anisotropy = anisotropy,
+    silent = params$silent
+  )
+  
+  (s <- sanity(m))
+  if (length(s[s == TRUE]) < 8) {
+    
+    spatiotemporal <- list("off", "iid")
+    anisotropy <- FALSE
+    
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = spatiotemporal,
+      anisotropy = anisotropy,
+      silent = params$silent
+    )
+  }
+  
+  saveRDS(m, file = paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
+}
+```
+
+```{r,warning = FALSE, message = TRUE}
+m <- readRDS(paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
+if (max(m$gradients) > 0.001) {
+  m <- run_extra_optimization(m, newton_loops = 1L, nlminb_loops = 0L)
+  saveRDS(m, file = paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
+}
+m
+
+(s <- sanity(m))
+
+if (length(s[s == TRUE]) < 8) {
+  update_index <- FALSE
+  print("Model still not converging.")
+} else {
+  tidy(m, effects = "ran_pars", conf.int = TRUE)
+  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+  sdmTMB:::plot_anisotropy2(m)
+
+  supressMessage(r <- residuals(m, "mle-mcmc", mcmc_warmup = 100, mcmc_iter = 101))
+  qqnorm(r)
+  qqline(r)
+}
+```
+
+Load grid
+```{r, message=FALSE, warning=FALSE}
+if (update_index) {
+  if (survey == "SYN QCS") {
+    nd <- readRDS("grids/synoptic_grid.rds") %>% filter(survey == survey)
+    model_ssid <- c(1)
+  }
+
+  if (survey == "SYN HS") {
+    nd <- readRDS("grids/synoptic_grid.rds") %>% filter(survey == survey)
+    model_ssid <- c(3)
+  }
+
+  if (survey == "SYN WCVI") {
+    nd <- readRDS("grids/synoptic_grid.rds") %>% filter(survey == survey)
+    model_ssid <- c(4)
+  }
+
+  if (survey == "SYN WCHG") {
+    nd <- readRDS("grids/synoptic_grid.rds") %>% filter(survey == survey)
+    model_ssid <- c(16)
+  }
+
+  if (survey == "Coast-wide trawl surveys") {
+    nd <- readRDS(here::here("data-generated/nd_whole_coast_index.rds")) %>% mutate(cell_area = 4)
+  }
+}
+```
+
+Get index
+```{r}
+dir.create("indices", showWarnings = FALSE)
+
+if (update_index) {
+  make_grid <- function(x, years) {
+    .x <- x
+    years <- sort(unique(years))
+    .nd <- do.call(
+      "rbind",
+      replicate(length(years), .x, simplify = FALSE)
+    )
+    .nd$year <- rep(years, each = nrow(.x))
+    .nd
+  }
+
+  fitted_yrs <- sort(unique(m$data$year))
+
+  nd <- make_grid(nd, years = fitted_yrs)
+  nd <- na.omit(nd)
+  nd$year <- as.integer(nd$year)
+  nd$log_depth <- log(nd$depth)
+
+  p <- predict(m, newdata = nd, return_tmb_object = TRUE)
+  i <- get_index(p, area = nd$cell_area, bias_correct = TRUE)
+
+  i <- i %>% mutate(
+    species = species,
+    survey = survey,
+    surveys = paste(unique(positive_sets$survey_abbrev), collapse = ", "),
+    ssids = paste(unique(positive_sets$survey_series_id), collapse = ", "),
+    ssid_string = ssid_string,
+    family = paste0(family$clean_name),
+    anisotropy = anisotropy,
+    spatiotemporal = spatiotemporal,
+    model = name,
+    max_grad = max(m$gradients)
+  )
+  saveRDS(i, paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds"))
+}
+```
+
+Plot index
+```{r}
+dir.create("figs", showWarnings = FALSE)
+
+f <- paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds")
+if (file.exists(f)) {
+  i <- readRDS(f)
+  g <- ggplot(i, aes(year, est / 1000)) +
+    geom_line() +
+    geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.4) +
+    ylab("Biomass (tonnes)") +
+    ggtitle(paste(species), subtitle = paste0(survey))
+  ggsave(paste0("figs/", spp, "-", ssid_string, name, ".png"), height = 4, width = 6)
+  g
+}
+```
