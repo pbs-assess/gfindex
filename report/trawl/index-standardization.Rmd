@@ -11,8 +11,8 @@ params:
     # name: "no depth" # description used to name model rds
     name: "with depth" 
     anisotropy: TRUE
-    update_model: FALSE
-    # update_model: TRUE # will over write past models; will always attempt a model if none exists
+    # update_model: FALSE
+    update_model: TRUE # will over write past models; will always attempt a model if none exists
     update_index: TRUE
     # update_index: FALSE
     silent: TRUE
@@ -106,7 +106,7 @@ if (update_model) {
     formula <- density ~ 0 + as.factor(year)
   } else {
     if (name == "with-depth") {
-      formula <- density ~ 0 + as.factor(year)
+      formula <- density ~ 0 + as.factor(year) + poly(log_depth, 2)
     }
   }
 
