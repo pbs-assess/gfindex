@@ -1,0 +1,17 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.png
+*.pdf
+*.rds
+*.rda
+*.html
+*_cache/
+*_files/
+*.log
+*.key
+*.pdf
+*.aux
+.DS_Store
+
