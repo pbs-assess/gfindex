@@ -10,7 +10,7 @@ make_dat <- function(r, s) {
   )
 }
 
-list_regions <- c(#"SYN WCVI", "SYN QCS", "SYN HS",
+list_regions <- c("SYN WCVI", "SYN QCS", "SYN HS",
                   "SYN WCHG")
 list_species <- c(
   "Canary Rockfish"
@@ -25,14 +25,14 @@ render_separately <- function(...) callr::r(
 
 fit_index <- function(region, species) {
   spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
-  name <- "with depth" # describe model covariates
-  # name <- "no depth" # describe model covariates
+  # name <- "with depth" # describe model covariates
+  name <- "no depth" # describe model covariates
   region_name <- region
   try({
     render_separately("report/trawl/index-standardization.Rmd",
       params = list(
         species = species,
-        survey = region,
+        region = region,
         name = name,
         update_model = TRUE,
         update_index = FALSE,
