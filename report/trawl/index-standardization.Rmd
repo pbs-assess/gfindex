@@ -11,9 +11,9 @@ params:
     # region: "SYN WCVI"
     # survey: "Coast-wide trawl surveys"
     name: "no depth" # description used to name model rds
-    # name: "with depth" 
-    update_model: FALSE
-    # update_model: TRUE # will over write past models; will always attempt a model if none exists
+    # name: "with depth"
+    # update_model: FALSE
+    update_model: TRUE # will over write past models; will always attempt a model if none exists
     update_index: TRUE
     # update_index: FALSE
     silent: TRUE
@@ -110,6 +110,9 @@ if (update_model) {
       formula <- density ~ 0 + as.factor(year) + poly(log_depth, 2)
     }
   }
+  
+  set_priors <- sdmTMBpriors(
+    matern_s = pc_matern(range_gt = 7, sigma_lt = 5))
 
   m <- sdmTMB(
     formula,
@@ -119,8 +122,9 @@ if (update_model) {
     family = family,
     spatial = "on",
     spatiotemporal = "iid",
-    share_range = TRUE,
+    share_range = FALSE,
     anisotropy = TRUE,
+    priors = set_priors,
     silent = params$silent
   )
 
@@ -134,13 +138,15 @@ if (update_model) {
       family = family,
       spatial = "on",
       spatiotemporal = "iid",
-      share_range = FALSE,
+      share_range = TRUE,
       anisotropy = TRUE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
   
-  s <- sanity(m)
+
   if ((length(s[s == TRUE]) < 8)) {
     m <- sdmTMB(
       formula,
@@ -152,8 +158,10 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
 
   s <- sanity(m)
@@ -168,11 +176,33 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
 
-  s <- sanity(m)
+
+  t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
+  
+  if (t1[t1$term == "sigma_E",]$conf.high > 1000) {
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = list("off", "iid"),
+      share_range = FALSE,
+      anisotropy = TRUE,
+    priors = set_priors,
+      silent = params$silent
+    )
+      s <- sanity(m)
+  }
+  
+
   if (length(s[s == TRUE]) < 8) {
     m <- sdmTMB(
       formula,
@@ -184,11 +214,12 @@ if (update_model) {
       spatiotemporal = list("off", "iid"),
       share_range = TRUE,
       anisotropy = TRUE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
   
-  s <- sanity(m)
   if (length(s[s == TRUE]) < 8) {
     m <- sdmTMB(
       formula,
@@ -199,12 +230,13 @@ if (update_model) {
       spatial = "on",
       spatiotemporal = list("off", "iid"),
       share_range = FALSE,
-      anisotropy = TRUE,
+      anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
-  
-  s <- sanity(m)
+
   if (length(s[s == TRUE]) < 8) {
     m <- sdmTMB(
       formula,
@@ -216,11 +248,12 @@ if (update_model) {
       spatiotemporal = list("off", "iid"),
       share_range = TRUE,
       anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
-
-  s <- sanity(m)
+  
   if (length(s[s == TRUE]) < 8) {
     family <- tweedie()
     m <- sdmTMB(
@@ -233,11 +266,12 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = TRUE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
-  
-  s <- sanity(m)
+ 
   if (length(s[s == TRUE]) < 8) {
     m <- sdmTMB(
       formula,
@@ -249,11 +283,12 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
   
-    s <- sanity(m)
   if (length(s[s == TRUE]) < 8) {
     m <- sdmTMB(
       formula,
@@ -265,8 +300,10 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = FALSE,
+    priors = set_priors,
       silent = params$silent
     )
+      s <- sanity(m)
   }
   
   s <- sanity(m)
@@ -305,6 +342,7 @@ if (!s$all_ok) {
     qqline(r3)
 
     update_index <- FALSE
+    plot_index <- FALSE
     print(" Some residuals are infinite, so not calculating index.")
   } else {
     qqnorm(r)
@@ -426,14 +464,13 @@ plot_map <- function(dat, column) {
 if(file.exists(f)){
   p2 <- readRDS(f)
 if(m$family$family == "tweedie"){
-  plot_map(p2, "exp(est)") +
+  plot_map(p2, "est") +
     facet_wrap(~year) +
-    scale_fill_viridis_c(trans = "sqrt", na.value = "yellow", limits = c(0, quantile(exp(p2$est), 0.975))) +
-    ggtitle("Fixed + random effects")
+    ggtitle("Fixed + random effects in link space")
 } else{
   plot_map(p2, "est1") +
     facet_wrap(~year) +
-    ggtitle("Model 1 fixed + random effects")
+    ggtitle("Model 1 fixed + random effects in link space")
 }
 }
 ```
@@ -443,7 +480,21 @@ if (file.exists(f)) {
   if(m$family$family != "tweedie"){
   plot_map(p2, "est2") +
     facet_wrap(~year) +
-    ggtitle("Model 2 fixed + random effects")
+    ggtitle("Model 2 fixed + random effects in link space")
   }
 }
 ```
+
+
+```{r}
+f <- paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds")
+if(file.exists(f)){
+  p <- predict(m, newdata = nd, type = "response")
+
+  plot_map(p, "est") +
+    facet_wrap(~year) +
+    scale_fill_viridis_c(trans = "sqrt", na.value = "yellow", limits = c(0, quantile(p$est, 0.975))) +
+    ggtitle("Biomass estimates")
+}
+```
+

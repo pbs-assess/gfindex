@@ -30,21 +30,21 @@ render_separately <- function(...) callr::r(
 
 fit_index <- function(region, species) {
   spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
-  # name <- "with depth" # describe model covariates
-  name <- "no depth" # describe model covariates
+  model_name <- "with depth" # describe model covariates
+  # model_name <- "no depth" # describe model covariates
   region_name <- region
   try({
     render_separately("report/trawl/index-standardization.Rmd",
       params = list(
         species = species,
         region = region,
-        name = name,
+        name = model_name,
         update_model = TRUE,
         update_index = TRUE,
         silent = TRUE
       ),
       output_file = paste0(spp, "-",
-        gsub(" ", "-", gsub("\\/", "-", name)), "-",
+        gsub(" ", "-", gsub("\\/", "-", model_name)), "-",
         gsub(" ", "-", gsub("\\/", "-", region_name)), ".html")
     )
   })
