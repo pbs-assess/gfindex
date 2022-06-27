@@ -110,9 +110,10 @@ if (update_model) {
       formula <- density ~ 0 + as.factor(year) + poly(log_depth, 2)
     }
   }
-  
+
   set_priors <- sdmTMBpriors(
-    matern_s = pc_matern(range_gt = 7, sigma_lt = 5))
+    matern_s = pc_matern(range_gt = 7, sigma_lt = 5)
+  )
 
   m <- sdmTMB(
     formula,
@@ -124,12 +125,14 @@ if (update_model) {
     spatiotemporal = "iid",
     share_range = FALSE,
     anisotropy = TRUE,
-    priors = set_priors,
     silent = params$silent
   )
 
   s <- sanity(m)
-  if ((length(s[s == TRUE]) < 8)) {
+  
+  t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+  
+  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -140,12 +143,12 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = TRUE,
-    priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
   }
-  
+
 
   if ((length(s[s == TRUE]) < 8)) {
     m <- sdmTMB(
@@ -158,14 +161,14 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = FALSE,
-    priors = set_priors,
+      priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
   }
 
-  s <- sanity(m)
-  if ((length(s[s == TRUE]) < 8)) {
+  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -176,85 +179,16 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = FALSE,
-    priors = set_priors,
+      priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
   }
-
 
   t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
-  
-  if (t1[t1$term == "sigma_E",]$conf.high > 1000) {
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = family,
-      spatial = "on",
-      spatiotemporal = list("off", "iid"),
-      share_range = FALSE,
-      anisotropy = TRUE,
-    priors = set_priors,
-      silent = params$silent
-    )
-      s <- sanity(m)
-  }
-  
 
-  if (length(s[s == TRUE]) < 8) {
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = family,
-      spatial = "on",
-      spatiotemporal = list("off", "iid"),
-      share_range = TRUE,
-      anisotropy = TRUE,
-    priors = set_priors,
-      silent = params$silent
-    )
-      s <- sanity(m)
-  }
-  
-  if (length(s[s == TRUE]) < 8) {
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = family,
-      spatial = "on",
-      spatiotemporal = list("off", "iid"),
-      share_range = FALSE,
-      anisotropy = FALSE,
-    priors = set_priors,
-      silent = params$silent
-    )
-      s <- sanity(m)
-  }
-
-  if (length(s[s == TRUE]) < 8) {
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = family,
-      spatial = "on",
-      spatiotemporal = list("off", "iid"),
-      share_range = TRUE,
-      anisotropy = FALSE,
-    priors = set_priors,
-      silent = params$silent
-    )
-      s <- sanity(m)
-  }
-  
-  if (length(s[s == TRUE]) < 8) {
+  # try tweedie
+  if (length(s[s == TRUE]) < 8|t2[t2$term == "sigma_E", ]$conf.high > 1000) {
     family <- tweedie()
     m <- sdmTMB(
       formula,
@@ -266,13 +200,14 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = TRUE,
-    priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
   }
- 
-  if (length(s[s == TRUE]) < 8) {
+  
+  t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
+  
+  if (length(s[s == TRUE]) < 8|t[t$term == "sigma_O", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -283,13 +218,14 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = FALSE,
       anisotropy = FALSE,
-    priors = set_priors,
+      priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
+    t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   }
-  
-  if (length(s[s == TRUE]) < 8) {
+
+  if (length(s[s == TRUE]) < 8|t[t$term == "range", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -300,27 +236,106 @@ if (update_model) {
       spatiotemporal = "iid",
       share_range = TRUE,
       anisotropy = FALSE,
-    priors = set_priors,
+      priors = set_priors,
       silent = params$silent
     )
-      s <- sanity(m)
+    s <- sanity(m)
   }
+  t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   
-  s <- sanity(m)
+  
+  # if tweedie didn't work, try no spatiotemporal for presence/absence portion
+   if (!s$all_ok|max(t$conf.high)> 1000) {
+       family <- delta_gamma()
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = list("off", "iid"),
+      share_range = FALSE,
+      anisotropy = TRUE,
+      silent = params$silent
+    )
+    s <- sanity(m)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+
+  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = list("off", "iid"),
+      share_range = TRUE,
+      anisotropy = TRUE,
+      silent = params$silent
+    )
+    s <- sanity(m)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+  }
+
+  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "sigma_E", ]$conf.high > 1000) {
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = list("off", "iid"),
+      share_range = FALSE,
+      anisotropy = FALSE,
+      priors = set_priors,
+      silent = params$silent
+    )
+    s <- sanity(m)
+ t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+  }
+
+  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = family,
+      spatial = "on",
+      spatiotemporal = list("off", "iid"),
+      share_range = TRUE,
+      anisotropy = FALSE,
+      priors = set_priors,
+      silent = params$silent
+    )
+    s <- sanity(m)
+  t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+  }
+   }
+  t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
+  
   if (!s$all_ok) {
-      m <- run_extra_optimization(m, newton_loops = 1L, nlminb_loops = 1L)
+    m <- run_extra_optimization(m, newton_loops = 1L, nlminb_loops = 1L)
   }
   saveRDS(m, file = paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
 }
 ```
+
+
 
 ```{r, warning = TRUE, message = TRUE}
 m <- readRDS(paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
 m
 
 s <- sanity(m)
+
 tidy(m, effects = "ran_pars", conf.int = TRUE)
-try({tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)})
+try({
+  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+})
 ```
 
 ```{r}
@@ -331,6 +346,7 @@ if (m$call$anisotropy == TRUE) {
 
 ```{r, warning = FALSE, message = FALSE}
 if (!s$all_ok) {
+  plot_index <- FALSE
   update_index <- FALSE
   print("Model still not converging.")
 } else {
@@ -421,9 +437,9 @@ if (update_index) {
     surveys = paste(unique(positive_sets$survey_abbrev), collapse = ", "),
     ssids = paste(unique(positive_sets$survey_series_id), collapse = ", "),
     ssid_string = ssid_string,
-    family = ifelse(length(m$family$family)>1, m$family$clean_name, m$family$family),
+    family = ifelse(length(m$family$family) > 1, m$family$clean_name, m$family$family),
     anisotropy = m$call$anisotropy,
-    spatiotemporal = paste(m$call$spatiotemporal),
+    spatiotemporal = paste(c(m$call$spatiotemporal)),
     share_range = m$call$share_range,
     model = name,
     max_grad = max(m$gradients)
@@ -438,63 +454,70 @@ dir.create("figs", showWarnings = FALSE)
 
 f <- paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds")
 if (file.exists(f)) {
-  i <- readRDS(f)
-  g <- ggplot(i, aes(year, est / 1000)) +
-    geom_line() +
-    geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.4) +
-    ylab("Biomass (tonnes)") +
-    ggtitle(paste(species), subtitle = paste0(region))
-  ggsave(paste0("figs/", spp, "-", ssid_string, name, ".png"), height = 4, width = 6)
-  g
+  if (plot_index) {
+    i <- readRDS(f)
+    g <- ggplot(i, aes(year, est / 1000)) +
+      geom_line() +
+      geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.4) +
+      ylab("Biomass (tonnes)") +
+      ggtitle(paste(species), subtitle = paste0(region))
+    ggsave(paste0("figs/", spp, "-", ssid_string, name, ".png"), height = 4, width = 6)
+    g
+  }
 }
 ```
 
 Map predictions
 ```{r}
-f <- paste0("predictions/p-", spp, "-", ssid_string, "-", name, ".rds")
+if (plot_index) {
+  f <- paste0("predictions/p-", spp, "-", ssid_string, "-", name, ".rds")
 
-plot_map <- function(dat, column) {
-  ggplot(dat, aes_string("X", "Y", fill = column)) +
-    geom_tile() +
-    scale_colour_viridis_c() +
-    scale_fill_viridis_c() +
-    coord_fixed()
-}
+  plot_map <- function(dat, column) {
+    ggplot(dat, aes_string("X", "Y", fill = column)) +
+      geom_tile() +
+      scale_colour_viridis_c() +
+      scale_fill_viridis_c() +
+      coord_fixed()
+  }
 
-if(file.exists(f)){
-  p2 <- readRDS(f)
-if(m$family$family == "tweedie"){
-  plot_map(p2, "est") +
-    facet_wrap(~year) +
-    ggtitle("Fixed + random effects in link space")
-} else{
-  plot_map(p2, "est1") +
-    facet_wrap(~year) +
-    ggtitle("Model 1 fixed + random effects in link space")
-}
+  if (file.exists(f)) {
+    p2 <- readRDS(f)
+    if (m$family$family == "tweedie") {
+      plot_map(p2, "est") +
+        facet_wrap(~year) +
+        ggtitle("Fixed + random effects in link space")
+    } else {
+      plot_map(p2, "est1") +
+        facet_wrap(~year) +
+        ggtitle("Model 1 fixed + random effects in link space")
+    }
+  }
 }
 ```
 
 ```{r}
-if (file.exists(f)) {
-  if(m$family$family != "tweedie"){
-  plot_map(p2, "est2") +
-    facet_wrap(~year) +
-    ggtitle("Model 2 fixed + random effects in link space")
+if (plot_index) {
+  if (file.exists(f)) {
+    if (m$family$family != "tweedie") {
+      plot_map(p2, "est2") +
+        facet_wrap(~year) +
+        ggtitle("Model 2 fixed + random effects in link space")
+    }
   }
 }
 ```
 
 
 ```{r}
-f <- paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds")
-if(file.exists(f)){
-  p <- predict(m, newdata = nd, type = "response")
+if (plot_index) {
+  f <- paste0("indices/i-", spp, "-", ssid_string, "-", name, ".rds")
+  if (file.exists(f)) {
+    p <- predict(m, newdata = nd, type = "response")
 
-  plot_map(p, "est") +
-    facet_wrap(~year) +
-    scale_fill_viridis_c(trans = "sqrt", na.value = "yellow", limits = c(0, quantile(p$est, 0.975))) +
-    ggtitle("Biomass estimates")
+    plot_map(p, "est") +
+      facet_wrap(~year) +
+      scale_fill_viridis_c(trans = "sqrt", na.value = "yellow", limits = c(0, quantile(p$est, 0.975))) +
+      ggtitle("Biomass estimates")
+  }
 }
 ```
-
