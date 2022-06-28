@@ -41,7 +41,7 @@ region <- params$region
 name <- gsub(" ", "-", gsub("\\/", "-", tolower(params$name)))
 update_model <- params$update_model
 update_index <- params$update_index
-
+plot_index <- TRUE
 paste("survey =", region)
 paste("model type =", params$name)
 family <- delta_gamma()
@@ -323,7 +323,6 @@ if (update_model) {
   saveRDS(m, file = paste0("models/m-", spp, "-", ssid_string, "-", name, ".rds"))
 }
 ```
-
 
 
 ```{r, warning = TRUE, message = TRUE}
