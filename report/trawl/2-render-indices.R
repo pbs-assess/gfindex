@@ -59,7 +59,7 @@ fit_index <- function(region, species, covariate_type) {
 is_rstudio <- !is.na(Sys.getenv("RSTUDIO", unset = NA))
 is_unix <- .Platform$OS.type == "unix"
 if (is_unix && !is_rstudio) {
-  future::plan(future::multicore, workers = 6L)
+  future::plan(future::multicore, workers = 4L)
 } else {
   future::plan(future::multisession, workers = 4L)
 }

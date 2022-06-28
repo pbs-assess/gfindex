@@ -1,6 +1,6 @@
 ---
 title: "Trawl survey index standardization for `r paste(params$species)`"
-author: "Philina English"
+author: "Philina English and Sean Anderson"
 date: "`r Sys.Date()`"
 output: html_document
 params:
@@ -59,7 +59,7 @@ if (region == "Coast-wide trawl surveys") {
 }
 ```
 
-Get species data 
+<!-- Get species data  -->
 
 ```{r dat}
 spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
@@ -94,7 +94,7 @@ if (region %in% c("SYN WCHG")) {
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
 plot(spde)
-spde$mesh$n
+# spde$mesh$n
 ```
 
 ```{r load-cached}
@@ -115,10 +115,10 @@ if (update_model) {
   update_index <- TRUE
 
   if (covariate_type == "no-depth") {
-    formula <- density ~ 0 + as.factor(year)
+    formula <- catch_weight ~ 0 + as.factor(year)
   } else {
     if (covariate_type == "with-depth") {
-      formula <- density ~ 0 + as.factor(year) + poly(log_depth, 2)
+      formula <- catch_weight ~ 0 + as.factor(year) + s(log_depth, k = 5)
     }
   }
 
@@ -135,6 +135,7 @@ if (update_model) {
     time = "year",
     family = family,
     spatial = "on",
+    offset = log(data$area_km2),
     spatiotemporal = "iid",
     share_range = params$share_range,
     anisotropy = params$anisotropy,
@@ -275,7 +276,8 @@ if (update_index) {
   }
 
   if (region == "Coast-wide trawl surveys") {
-    nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>% mutate(cell_area = 4)
+    nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>% 
+      mutate(cell_area = 4)
   }
 }
 ```
@@ -325,7 +327,8 @@ if (update_index) {
 }
 ```
 
-Plot index
+<!-- Plot index -->
+
 ```{r plot-index}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
