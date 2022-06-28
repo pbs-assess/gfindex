@@ -5,9 +5,9 @@ date: "`r Sys.Date()`"
 output: html_document
 params:
     species: "Canary Rockfish"
-    region: "SYN WCHG"
+    # region: "SYN WCHG"
     # region: "SYN QCS"
-    # region: "SYN HS"
+    region: "SYN HS"
     # region: "SYN WCVI"
     # survey: "Coast-wide trawl surveys"
     name: "no depth" # description used to name model rds
@@ -129,10 +129,10 @@ if (update_model) {
   )
 
   s <- sanity(m)
-  
+  t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
   
-  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+  if (!s$all_ok|t1[t1$term == "range", ]$conf.high > 1000|t2[t2$term == "range", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -146,11 +146,11 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
+    t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
     t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
-  }
+   }
 
-
-  if ((length(s[s == TRUE]) < 8)) {
+  if (!s$all_ok|t1[t1$term == "range", ]$conf.high > 1000|t2[t2$term == "range", ]$conf.high > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -165,10 +165,11 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
+    t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
     t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
-  }
+   }
 
-  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t1[t1$term == "range", ]$conf.high) > 1000|max(t2[t2$term == "range", ]$conf.high) > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -183,12 +184,12 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
-  }
+    t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+   }
 
-  t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
-
-  # try tweedie
-  if (length(s[s == TRUE]) < 8|t2[t2$term == "sigma_E", ]$conf.high > 1000) {
+ # try tweedie
+  if (!s$all_ok|max(t1$conf.high, t2$conf.high)> 1000) {
     family <- tweedie()
     m <- sdmTMB(
       formula,
@@ -207,7 +208,7 @@ if (update_model) {
   
   t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   
-  if (length(s[s == TRUE]) < 8|t[t$term == "sigma_O", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t1$conf.high, t2$conf.high)> 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -225,7 +226,7 @@ if (update_model) {
     t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   }
 
-  if (length(s[s == TRUE]) < 8|t[t$term == "range", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t[t$term == "range", ]$conf.high) > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -260,9 +261,10 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
+    t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
     t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
 
-  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t2[t2$term == "range", ]$conf.high, t1[t1$term == "range", ]$conf.high) > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -276,10 +278,11 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
+    t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
     t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
   }
 
-  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "sigma_E", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t$conf.high)> 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -294,10 +297,11 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
- t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
+     t1 <- tidy(m, effects = "ran_pars", conf.int = TRUE)
+    t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
   }
 
-  if ((length(s[s == TRUE]) < 8)|t2[t2$term == "range", ]$conf.high > 1000) {
+  if (!s$all_ok|max(t2[t2$term == "range", ]$conf.high, t1[t1$term == "range", ]$conf.high) > 1000) {
     m <- sdmTMB(
       formula,
       data,
@@ -312,8 +316,7 @@ if (update_model) {
       silent = params$silent
     )
     s <- sanity(m)
-  t2 <- tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2)
-  }
+    }
    }
   t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   
