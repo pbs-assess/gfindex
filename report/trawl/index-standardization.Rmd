@@ -17,7 +17,7 @@ params:
     update_index: TRUE
     share_range: TRUE
     anisotropy: FALSE
-    qq_residuals: TRUE
+    qq_residuals: FALSE
     silent: TRUE
 ---
 
@@ -172,6 +172,24 @@ if (update_model) {
       family = tweedie(),
       spatial = "on",
       spatiotemporal = "iid",
+      share_range = params$share_range,
+      anisotropy = params$anisotropy,
+      silent = params$silent,
+      control = ctrl
+    )
+    s <- sanity(m)
+  }
+  
+  if (!s$all_ok && isTRUE(family$delta)) {
+    # try tweedie without spatiotemporal
+    m <- sdmTMB(
+      formula,
+      data,
+      mesh = spde,
+      time = "year",
+      family = tweedie(),
+      spatial = "on",
+      spatiotemporal = "off",
       share_range = params$share_range,
       anisotropy = params$anisotropy,
       silent = params$silent,
