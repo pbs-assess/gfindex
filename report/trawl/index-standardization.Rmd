@@ -5,9 +5,9 @@ date: "`r Sys.Date()`"
 output: html_document
 params:
     species: "Canary Rockfish"
-    # region: "SYN WCHG"
+    region: "SYN WCHG"
     # region: "SYN QCS"
-    region: "SYN HS"
+    # region: "SYN HS"
     # region: "SYN WCVI"
     # survey: "Coast-wide trawl surveys"
     name: "no depth" # description used to name model rds
@@ -208,7 +208,7 @@ if (update_model) {
   
   t <- tidy(m, effects = "ran_pars", conf.int = TRUE)
   
-  if (!s$all_ok|max(t1$conf.high, t2$conf.high)> 1000) {
+  if (!s$all_ok|max(t$conf.high)> 1000) {
     m <- sdmTMB(
       formula,
       data,

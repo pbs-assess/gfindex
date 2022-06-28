@@ -13,7 +13,7 @@ make_dat <- function(r, s) {
 list_regions <- c(
       "SYN QCS"
     , "SYN WCVI"
-    , "SYN HS"
+    # , "SYN HS"
     , "SYN WCHG"
     )
 
