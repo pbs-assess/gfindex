@@ -9,7 +9,7 @@ params:
     region: "SYN QCS"
     # region: "SYN HS"
     # region: "SYN WCVI"
-    # survey: "Coast-wide trawl surveys"
+    # region: "Coast-wide trawl surveys"
     # covariate_type: "no depth" # or "with depth
     covariate_type: "with depth"
     # update_model: FALSE
@@ -67,7 +67,7 @@ spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
 data <- readRDS(here("data/all-survey-sets-2021.rds")) %>%
   rename(survey_series_id = survey_series_id.x) %>%
   filter(species_common_name == tolower(species)) %>%
-  filter(depth_m > 0) %>% 
+  filter(depth_m > 0) %>%
   filter(survey_abbrev %in% region)
 
 # change from per m2 to per km2:
@@ -157,74 +157,49 @@ if (update_model) {
 
   if (!s$all_ok && isTRUE(family$delta)) {
     # turn off spatiotemporal fields for binomial
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = family,
-      spatial = list("on", "on"),
-      offset = log(data$area_swept),
-      spatiotemporal = list("off", "iid"),
-      share_range = params$share_range,
-      anisotropy = params$anisotropy,
-      silent = params$silent,
-      control = ctrl
-    )
+    m1 <- update(m, spatiotemporal = list("off", "iid"))
     s <- sanity(m)
   }
 
   if (!s$all_ok && isTRUE(family$delta)) {
     # try tweedie
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
+    m <- update(
+      m,
       family = tweedie(),
-      spatial = "on",
-      offset = log(data$area_swept),
-      spatiotemporal = "iid",
-      share_range = params$share_range,
-      anisotropy = params$anisotropy,
-      silent = params$silent,
-      control = ctrl
-    )
-    s <- sanity(m)
-  }
-  
-  if (!s$all_ok && isTRUE(family$delta)) {
-    # try tweedie without spatiotemporal
-    m <- sdmTMB(
-      formula,
-      data,
-      mesh = spde,
-      time = "year",
-      family = tweedie(),
-      spatial = "on",
-      offset = log(data$area_swept),
-      spatiotemporal = "off",
-      share_range = params$share_range,
-      anisotropy = params$anisotropy,
-      silent = params$silent,
-      control = ctrl
+      spatiotemporal = "iid"
     )
     s <- sanity(m)
   }
 
-  saveRDS(m, file = here(paste0("models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
+  if (!s$all_ok && isTRUE(family$delta)) {
+    # try tweedie without spatiotemporal
+    m <- update(
+      m,
+      family = tweedie(),
+      spatiotemporal = "off",
+    )
+    s <- sanity(m)
+  }
+
+  saveRDS(m, file = here(paste0(
+    "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
+  )))
 }
 ```
 
 
 ```{r read-model, warning = TRUE, message = TRUE}
-m <- readRDS(here(paste0("models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
+m <- readRDS(here(paste0(
+  "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
+)))
 m
 
 s <- sanity(m)
 
 tidy(m, effects = "ran_pars", conf.int = TRUE)
-if (length(m$call$family) > 1L) tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L)
+if (length(m$call$family) > 1L) {
+  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L)
+}
 ```
 
 ```{r plot-aniso}
@@ -289,7 +264,7 @@ if (update_index) {
   }
 
   if (region == "Coast-wide trawl surveys") {
-    nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>% 
+    nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>%
       mutate(cell_area = 4e+6)
   }
 }
@@ -299,116 +274,123 @@ nd$cell_area <- 4e+6
 
 <!-- Get index -->
 
-```{r get-index}
-if (update_index) {
-  make_grid <- function(x, years) {
-    .x <- x
-    years <- sort(unique(years))
-    .nd <- do.call(
-      "rbind",
-      replicate(length(years), .x, simplify = FALSE)
-    )
-    .nd$year <- rep(years, each = nrow(.x))
-    .nd
-  }
-
-  fitted_yrs <- sort(unique(m$data$year))
-
-  nd <- make_grid(nd, years = fitted_yrs)
-  nd <- na.omit(nd)
-  nd$year <- as.integer(nd$year)
-  nd$log_depth <- log(nd$depth)
-
-  p <- predict(m, newdata = nd, return_tmb_object = TRUE)
-
-  saveRDS(p$data, here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
-
-  i <- get_index(p, area = nd$cell_area, bias_correct = TRUE)
-
-  i <- i %>% mutate(
-    species = species,
-    survey = region,
-    surveys = paste(unique(positive_sets$survey_abbrev), collapse = ", "),
-    ssids = paste(unique(positive_sets$survey_series_id), collapse = ", "),
-    ssid_string = ssid_string,
-    family = ifelse(length(m$family$family) > 1, m$family$clean_name, m$family$family),
-    anisotropy = params$anisotropy,
-    spatiotemporal = paste(c(m$call$spatiotemporal), collapse = " "),
-    share_range = params$share_range,
-    model = covariate_type,
-    max_grad = max(m$gradients)
+```{r get-index, eval=update_index}
+make_grid <- function(x, years) {
+  .x <- x
+  years <- sort(unique(years))
+  .nd <- do.call(
+    "rbind",
+    replicate(length(years), .x, simplify = FALSE)
   )
-  saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
+  .nd$year <- rep(years, each = nrow(.x))
+  .nd
 }
+
+fitted_yrs <- sort(unique(m$data$year))
+
+nd <- make_grid(nd, years = fitted_yrs)
+nd <- na.omit(nd)
+nd$year <- as.integer(nd$year)
+nd$log_depth <- log(nd$depth)
+
+p <- predict(m, newdata = nd, return_tmb_object = TRUE)
+
+saveRDS(p$data, here(paste0(
+  "predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"
+)))
+
+i <- get_index(p, area = nd$cell_area, bias_correct = TRUE)
+
+i <- i %>% mutate(
+  species = species,
+  survey = region,
+  surveys = paste(unique(positive_sets$survey_abbrev), collapse = ", "),
+  ssids = paste(unique(positive_sets$survey_series_id), collapse = ", "),
+  ssid_string = ssid_string,
+  family = if (length(m$family$family) > 1) m$family$clean_name else m$family$family,
+  anisotropy = params$anisotropy,
+  spatiotemporal = paste(c(m$call$spatiotemporal), collapse = " "),
+  share_range = params$share_range,
+  model = covariate_type,
+  max_grad = max(m$gradients)
+)
+saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
 ```
 
 <!-- Plot index -->
 
-```{r plot-index}
+```{r plot-index, eval=plot_index}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
-  if (plot_index) {
-    i <- readRDS(f)
-    g <- ggplot(i, aes(year, est / 1000)) +
-      geom_line() +
-      geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.4) +
-      ylab("Biomass (tonnes)") +
-      ggtitle(paste(species), subtitle = paste0(region))
-    ggsave(here(paste0("figs/", spp, "-", ssid_string, covariate_type, ".png")), height = 4, width = 6)
-    g
-  }
+  i <- readRDS(f)
+  g <- ggplot(i, aes(year, est / 1000)) +
+    geom_line(alpha = 0.3, lty = 1, lwd = 0.5) +
+    geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000),
+      alpha = 0.2, fill = "grey60"
+    ) +
+    geom_pointrange(aes(ymin = lwr / 1000, ymax = upr / 1000),
+      alpha = 1, colour = "grey20"
+    ) +
+    ylab("Biomass (tonnes)") +
+    ggtitle(paste(species), subtitle = paste0(region)) +
+    coord_cartesian(
+      ylim = c(0, max(i$upr / 1000) * 1.03),
+      expand = FALSE, xlim = range(i$year) + c(-0.25, 0.25)
+    ) +
+    theme_light() +
+    theme(axis.title.x = element_blank())
+  ggsave(here(paste0("figs/", spp, "-", ssid_string, covariate_type, ".png")),
+    height = 4, width = 6
+  )
+  g
 }
 ```
 
 <!-- Map predictions -->
 
-```{r plot-predictions}
+```{r plot-predictions, eval=plot_index}
 f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
-if (plot_index) {
-  
-  plot_map <- function(dat, column) {
-    ggplot(dat, aes_string("X", "Y", fill = column)) +
-      geom_tile() +
-      scale_colour_viridis_c() +
-      scale_fill_viridis_c() +
-      coord_fixed()
-  }
-  
-  if (file.exists(f)) {
-    p2 <- readRDS(f)
-    if (length(m$family$family) == 1L) {
-      plot_map(p2, "est") +
-        facet_wrap(~year) +
-        ggtitle("Fixed + random effects in link space")
-    } else {
-      plot_map(p2, "est1") +
-        facet_wrap(~year) +
-        ggtitle("Model 1 fixed + random effects in link space")
-    }
+plot_map <- function(dat, column) {
+  ggplot(dat, aes_string("X", "Y", fill = column)) +
+    geom_tile() +
+    scale_colour_viridis_c() +
+    scale_fill_viridis_c() +
+    coord_fixed()
+}
+
+if (file.exists(f)) {
+  p2 <- readRDS(f)
+  if (length(m$family$family) == 1L) {
+    plot_map(p2, "est") +
+      facet_wrap(~year) +
+      ggtitle("Fixed + random effects in link space")
+  } else {
+    plot_map(p2, "est1") +
+      facet_wrap(~year) +
+      ggtitle("Model 1 fixed + random effects in link space")
   }
 }
 ```
 
-```{r plot-index2}
-if (plot_index) {
-  if (file.exists(f)) {
-    if (length(m$family$family) > 1L) {
-      plot_map(p2, "est2") +
-        facet_wrap(~year) +
-        ggtitle("Model 2 fixed + random effects in link space")
-    }
+```{r plot-index2, eval=plot_index}
+if (file.exists(f)) {
+  if (length(m$family$family) > 1L) {
+    plot_map(p2, "est2") +
+      facet_wrap(~year) +
+      ggtitle("Model 2 fixed + random effects in link space")
   }
 }
 ```
 
 
-```{r plot-biomass}
-if (plot_index) {
-  p <- predict(m, newdata = nd, type = "response")
-  
-  plot_map(p, "est") +
-    facet_wrap(~year) +
-    scale_fill_viridis_c(trans = "sqrt", na.value = "yellow", limits = c(0, quantile(p$est, 0.975))) +
-    ggtitle("Biomass estimates")
-}
+```{r plot-biomass, eval=plot_index}
+p <- predict(m, newdata = nd, type = "response")
+
+plot_map(p, "est") +
+  facet_wrap(~year) +
+  scale_fill_viridis_c(
+    trans = "sqrt", na.value = "yellow",
+    limits = c(0, quantile(p$est, 0.975))
+  ) +
+  ggtitle("Biomass estimates")
 ```
