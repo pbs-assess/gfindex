@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: bookdown::html_document2
 params:
     species: "Pacific Cod"
-    region: "SYN WCHG"
+    region: "SYN WCVI"
     covariate_type: "with depth" # or "no depth"
     update_model: TRUE # will over write past models; will always attempt if none exists
     update_index: TRUE
@@ -252,7 +252,7 @@ m <- try(sdmTMB(
 s <- sanity(m)
 
 if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-  fitted_type <- "delta-Gamma model with spatial random fields"
+  fitted_type <- "delta-Gamma model without spatiotemporal random fields on detection probability"
   m1 <- try(update(m, spatiotemporal = list("off", "iid")))
   s <- sanity(m)
 }
@@ -464,7 +464,7 @@ plot_map(p2, "exp(est2)") +
     trans = "sqrt", na.value = "yellow",
     limits = c(0, quantile(exp(p2$est2), 0.99, na.rm = TRUE))
   ) +
-  labs(fill = "Biomass per m^2\ngiven encounter", colour = "Biomass per m^2\ngiven encounter") +
+  labs(fill = expression("Biomass per"~m^2~"\ngiven encounter"), colour = expression("Biomass per"~m^2~"\ngiven encounter")) +
   ggtitle("Gamma model of positive catch.")
 ```
 
@@ -479,7 +479,7 @@ plot_map(p, "est") +
     trans = "sqrt", na.value = "yellow",
     limits = c(0, quantile(p$est, 0.99, na.rm = TRUE))
   ) +
-  labs(fill = "Biomass per m^2", colour = "Biomass per m^2") +
+  labs(fill = expression("Biomass per"~m^2), colour = expression("Biomass per"~m^2)) +
   ggtitle("Overall biomass density estimates")
 ```
 
