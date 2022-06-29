@@ -10,10 +10,10 @@ make_dat <- function(r, s, .c) {
 }
 
 list_regions <- c(
-  "SYN QCS"
-  # "SYN WCVI",
-  # "SYN HS",
-  # "SYN WCHG"
+  "SYN QCS",
+  "SYN WCVI",
+  "SYN HS",
+  "SYN WCHG"
 )
 
 list_species <- c(
