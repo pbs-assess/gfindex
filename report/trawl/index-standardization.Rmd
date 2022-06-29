@@ -6,25 +6,27 @@ output: html_document
 params:
     species: "Canary Rockfish"
     region: "SYN WCHG"
-    # region: "SYN QCS"
-    # region: "SYN HS"
-    # region: "SYN WCVI"
-    # region: "Coast-wide trawl surveys"
-    # covariate_type: "no depth" # or "with depth
-    covariate_type: "with depth"
-    # update_model: FALSE
-    update_model: TRUE # will over write past models; will always attempt a model if none exists
+    covariate_type: "with depth" # or "no depth"
+    update_model: TRUE # will over write past models; will always attempt if none exists
     update_index: TRUE
     share_range: TRUE
     anisotropy: FALSE
     qq_residuals: FALSE
     silent: TRUE
+    cutoff: 10
+    cutoff_wchg: 7
+    starr_mode: TRUE
 ---
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(
-  fig.width = 11, fig.height = 8.5,
-  echo = FALSE, warning = FALSE, message = FALSE
+  fig.width = 7,
+  fig.asp = 0.618,
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE,
+  comment = "#>",
+  collapse = TRUE
 )
 
 library(dplyr)
@@ -34,12 +36,26 @@ library(here)
 
 # options(scipen = 999)
 theme_set(
-  theme_bw(base_size = 14)
+  theme_bw(base_size = 11)
 )
 
 dir.create(here("predictions"), showWarnings = FALSE)
 dir.create(here("indices"), showWarnings = FALSE)
 dir.create(here("figs"), showWarnings = FALSE)
+```
+
+```{r assertions}
+stopifnot(params$covariate_type %in% c("with depth", "no depth"))
+stopifnot(params$region %in% c("SYN WCHG", "SYN QCS", "SYN HS", "SYN WCVI"))
+stopifnot(is.character(params$species))
+stopifnot(is.numeric(params$cutoff))
+stopifnot(is.numeric(params$cutoff_wchg))
+stopifnot(params$cutoff > 0)
+stopifnot(params$cutoff_wchg > 0)
+stopifnot(all(unlist(lapply(
+  list(params$update_index, params$share_range, params$anisotropy, params$qq_residuals, params$starr_mode),
+  is.logical
+))))
 ```
 
 ```{r params}
@@ -95,31 +111,66 @@ ssid_string <- paste0(unique(data$survey_series_id), collapse = "n")
 data <- sdmTMB::add_utm_columns(data, c("longitude", "latitude"), utm_crs = 32609)
 ```
 
+```{r load-coast}
+coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
+  range(data$latitude) + c(-0.5, 0.5),
+  utm_zone = 9
+)
+coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
+```
+
 ```{r raw-data-plot}
-col <- RColorBrewer::brewer.pal(3, "Blues")
-ggplot(filter(data, density > 0), aes_string("X", "Y", size = "density")) +
-  geom_point(data = filter(data, density == 0), pch = 4, size = 0.8, colour = "grey60") +
-  geom_point(colour = col[3]) +
-  scale_size_area() +
-  # scale_colour_viridis_c(trans = "log10") +
-  coord_fixed() +
-  labs(colour = "Density (kg/m^2)", size = "Density (kg/m^2)") +
-  facet_wrap(~year) +
-  ggtitle("Raw data")
+french <- FALSE
+en2fr <- rosettafish::en2fr
+plot_multiyear_survey_sets <- function(dat, survey_abbrev,
+  density_lab = "", french=FALSE) {
+  density_lab = paste(en2fr("Density",translate=french),expression(~(kg/km^2)))
+  ggplot(filter(dat, density > 0), aes(X, Y,
+    size = density,
+    fill = density)) +
+    scale_size_area(max_size = 8) +
+    geom_point(data = filter(dat, density == 0), pch = 4,
+      size = 1, col = "grey60") +
+    coords +
+    geom_point(pch = 21) +
+    facet_wrap(~year) +
+    geom_polygon(
+      data = coast, aes_string(x = "X", y = "Y", group = "PID"),
+      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+    scale_fill_viridis_c(trans = "sqrt") +
+    labs(fill = density_lab,
+      size = density_lab, x = en2fr("Easting", translate=french),
+      y = en2fr("Northing", translate=french)) +
+    guides(
+      size = guide_legend(order = 1),
+      fill = guide_colorbar(order = 0))
+}
+
+plot_multiyear_survey_sets(data, region)
+# col <- RColorBrewer::brewer.pal(3, "Blues")
+# ggplot(filter(data, density > 0), aes_string("X", "Y", size = "density")) +
+#   geom_point(data = filter(data, density == 0), pch = 4, size = 0.8, colour = "grey60") +
+#   geom_point(colour = col[3]) +
+#   scale_size_area() +
+#   # scale_colour_viridis_c(trans = "log10") +
+#   coord_fixed() +
+#   labs(colour = "Density (kg/m^2)", size = "Density (kg/m^2)") +
+#   facet_wrap(~year) +
+#   ggtitle("Raw data")
 ```
 
 <!-- Make mesh -->
 
 ```{r mesh, fig.width=5.5, fig.height=5.5}
 # standard settings
-cutoff <- 10
+cutoff <- params$cutoff
 spatiotemporal <- "iid"
 
 if (region %in% c("SYN WCHG")) {
-  cutoff <- 7
+  cutoff <- params$cutoff_wchg
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
-ggplot() + 
+ggplot() +
   inlabru::gg(spde$mesh) +
   geom_point(data = data, mapping = aes(X, Y), alpha = 0.5, pch = 21) +
   coord_equal() +
@@ -158,7 +209,7 @@ if (update_model) {
   )
   ctrl <- sdmTMBcontrol(newton_loops = 1L)
 
-  m <- sdmTMB(
+  m <- try(sdmTMB(
     formula,
     data,
     mesh = spde,
@@ -171,33 +222,33 @@ if (update_model) {
     anisotropy = params$anisotropy,
     silent = params$silent,
     control = ctrl
-  )
+  ))
 
   s <- sanity(m)
 
-  if (!s$all_ok && isTRUE(family$delta)) {
+  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
     # turn off spatiotemporal fields for binomial
-    m1 <- update(m, spatiotemporal = list("off", "iid"))
+    m1 <- try(update(m, spatiotemporal = list("off", "iid")))
     s <- sanity(m)
   }
 
-  if (!s$all_ok && isTRUE(family$delta)) {
+  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
     # try tweedie
-    m <- update(
+    m <- try(update(
       m,
       family = tweedie(),
       spatiotemporal = "iid"
-    )
+    ))
     s <- sanity(m)
   }
 
-  if (!s$all_ok && isTRUE(family$delta)) {
+  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
     # try tweedie without spatiotemporal
-    m <- update(
+    m <- try(update(
       m,
       family = tweedie(),
       spatiotemporal = "off",
-    )
+    ))
     s <- sanity(m)
   }
 
@@ -345,14 +396,17 @@ saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type,
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   i <- readRDS(f)
-  g <- ggplot(i, aes(year, est / 1000)) +
-    geom_line(alpha = 0.3, lty = 1, lwd = 0.5) +
-    geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000),
-      alpha = 0.2, fill = "grey60"
-    ) +
-    geom_pointrange(aes(ymin = lwr / 1000, ymax = upr / 1000),
-      alpha = 1, colour = "grey20"
-    ) +
+  g <- ggplot(i, aes(year, est / 1000))
+  
+  if (!params$starr_mode) {
+    g <- g + geom_line(alpha = 0.3, lty = 1, lwd = 0.5) +
+      geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000),
+        alpha = 0.2, fill = "grey60"
+      )
+  }
+  g <- g + geom_pointrange(aes(ymin = lwr / 1000, ymax = upr / 1000),
+    alpha = 1, colour = "grey20"
+  ) +
     ylab("Biomass (tonnes)") +
     ggtitle(paste(species), subtitle = paste0(region)) +
     coord_cartesian(
@@ -373,10 +427,14 @@ if (file.exists(f)) {
 f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 plot_map <- function(dat, column) {
   ggplot(dat, aes_string("X", "Y", fill = column)) +
+    geom_polygon(
+      data = coast, aes_string(x = "X", y = "Y", group = "PID"),
+      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
     geom_tile() +
     scale_colour_viridis_c() +
     scale_fill_viridis_c() +
-    coord_fixed()
+    coord_fixed() +
+    coords
 }
 
 if (file.exists(f)) {
