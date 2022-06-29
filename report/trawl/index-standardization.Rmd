@@ -149,7 +149,7 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
     geom_point(data = filter(dat, density == 0), pch = 4, 
       size = 0.7, col = "grey60") +
     coords +
-    geom_point(alpha = 0.5, pch = 21) +
+    geom_point(alpha = 0.8, pch = 21) +
     facet_wrap(~year) +
     geom_polygon(
       data = coast, aes_string(x = "X", y = "Y", group = "PID"),
