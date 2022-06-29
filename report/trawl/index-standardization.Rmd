@@ -170,7 +170,7 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
     )
 }
 
-plot_multiyear_survey_sets(data, region)
+data %>% arrange(-density) %>% plot_multiyear_survey_sets(., region)
 data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 ```
 
