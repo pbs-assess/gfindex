@@ -290,9 +290,11 @@ if (update_index) {
 
   if (region == "Coast-wide trawl surveys") {
     nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>% 
-      mutate(cell_area = 4)
+      mutate(cell_area = 4e+6)
   }
 }
+
+nd$cell_area <- 4e+6
 ```
 
 <!-- Get index -->
