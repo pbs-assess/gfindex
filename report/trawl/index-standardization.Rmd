@@ -92,9 +92,22 @@ ssid_string <- paste0(unique(data$survey_series_id), collapse = "n")
 data <- sdmTMB::add_utm_columns(data, c("longitude", "latitude"), utm_crs = 32609)
 ```
 
+```{r raw-data-plot}
+col <- RColorBrewer::brewer.pal(3, "Blues")
+ggplot(filter(data, density > 0), aes_string("X", "Y", size = "density")) +
+  geom_point(data = filter(data, density == 0), pch = 4, size = 0.8, colour = "grey60") +
+  geom_point(colour = col[3]) +
+  scale_size_area() +
+  # scale_colour_viridis_c(trans = "log10") +
+  coord_fixed() +
+  labs(colour = "Density (kg/m^2)", size = "Density (kg/m^2)") +
+  facet_wrap(~year) +
+  ggtitle("Raw data")
+```
+
 <!-- Make mesh -->
 
-```{r mesh}
+```{r mesh, fig.width=5.5, fig.height=5.5}
 # standard settings
 cutoff <- 10
 spatiotemporal <- "iid"
@@ -103,7 +116,11 @@ if (region %in% c("SYN WCHG")) {
   cutoff <- 7
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
-plot(spde)
+ggplot() + 
+  inlabru::gg(spde$mesh) +
+  geom_point(data = data, mapping = aes(X, Y), alpha = 0.5, pch = 21) +
+  coord_equal() +
+  ggtitle("SPDE mesh")
 # spde$mesh$n
 ```
 
@@ -274,7 +291,7 @@ nd$cell_area <- 4e+6
 
 <!-- Get index -->
 
-```{r get-index, eval=update_index}
+```{r make-grid}
 make_grid <- function(x, years) {
   .x <- x
   years <- sort(unique(years))
@@ -292,7 +309,9 @@ nd <- make_grid(nd, years = fitted_yrs)
 nd <- na.omit(nd)
 nd$year <- as.integer(nd$year)
 nd$log_depth <- log(nd$depth)
+```
 
+```{r get-index, eval=update_index}
 p <- predict(m, newdata = nd, return_tmb_object = TRUE)
 
 saveRDS(p$data, here(paste0(
@@ -337,7 +356,6 @@ if (file.exists(f)) {
       ylim = c(0, max(i$upr / 1000) * 1.03),
       expand = FALSE, xlim = range(i$year) + c(-0.25, 0.25)
     ) +
-    theme_light() +
     theme(axis.title.x = element_blank())
   ggsave(here(paste0("figs/", spp, "-", ssid_string, covariate_type, ".png")),
     height = 4, width = 6
@@ -390,7 +408,7 @@ plot_map(p, "est") +
   facet_wrap(~year) +
   scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(p$est, 0.975))
+    limits = c(0, quantile(p$est, 0.985))
   ) +
   ggtitle("Biomass estimates")
 ```
