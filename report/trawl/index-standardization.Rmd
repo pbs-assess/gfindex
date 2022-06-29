@@ -1,11 +1,11 @@
 ---
-title: "Trawl survey geostatistical index standardization for `r paste(params$species)`"
-author: "Philina English and Sean Anderson"
+title: "`r params$region` `r params$species` geostatistical index standardization"
+author: ""
 date: "`r Sys.Date()`"
 output: bookdown::html_document2
 params:
-    species: "Canary Rockfish"
-    region: "SYN WCHG"
+    species: "Pacific Cod"
+    region: "SYN QCS"
     covariate_type: "with depth" # or "no depth"
     update_model: TRUE # will over write past models; will always attempt if none exists
     update_index: TRUE
@@ -132,6 +132,7 @@ coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
   utm_zone = 9
 )
 coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
+utm_labs <- labs(x = "Easting", y = "Northing")
 ```
 
 ```{r raw-data-plot, fig.cap="Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density."}
@@ -191,7 +192,8 @@ ggplot() +
   inlabru::gg(spde$mesh) +
   geom_point(data = data, mapping = aes(X, Y), alpha = 0.5, pch = 21) +
   ggtitle("SPDE mesh") +
-  coord_equal(expand = FALSE, xlim = range(data$X) + c(-30, 30), ylim = range(data$Y) + c(-30, 30))
+  coord_equal(expand = FALSE, xlim = range(data$X) + c(-30, 30), ylim = range(data$Y) + c(-30, 30)) +
+  utm_labs
 # spde$mesh$n
 ```
 
@@ -213,76 +215,82 @@ if (!file.exists(f2)) {
 
 <!-- Run sdmTMB model -->
 
-```{r fit-models}
-if (update_model) {
-  update_index <- TRUE
+```{r fit-models, eval=update_model}
+update_index <- TRUE
 
-  if (covariate_type == "no-depth") {
-    formula <- catch_weight ~ 0 + as.factor(year)
-  } else {
-    if (covariate_type == "with-depth") {
-      formula <- catch_weight ~ 0 + as.factor(year) + s(log_depth, k = 5)
-    }
+if (covariate_type == "no-depth") {
+  formula <- catch_weight ~ 0 + as.factor(year)
+} else {
+  if (covariate_type == "with-depth") {
+    formula <- catch_weight ~ 0 + as.factor(year) + s(log_depth, k = 5)
   }
-
-  set_priors <- sdmTMBpriors(
-    matern_s = pc_matern(range_gt = 5, sigma_lt = 3),
-    matern_st = pc_matern(range_gt = 5, sigma_lt = 3)
-  )
-  ctrl <- sdmTMBcontrol(newton_loops = 1L)
-
-  m <- try(sdmTMB(
-    formula,
-    data,
-    mesh = spde,
-    time = "year",
-    family = family,
-    spatial = "on",
-    offset = log(data$area_swept),
-    spatiotemporal = "iid",
-    share_range = params$share_range,
-    anisotropy = params$anisotropy,
-    silent = params$silent,
-    control = ctrl
-  ))
-
-  s <- sanity(m)
-
-  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    m1 <- try(update(m, spatiotemporal = list("off", "iid")))
-    s <- sanity(m)
-  }
-
-  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    m <- try(update(
-      m,
-      family = tweedie(),
-      spatiotemporal = "iid"
-    ))
-    s <- sanity(m)
-  }
-
-  if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    m <- try(update(
-      m,
-      family = tweedie(),
-      spatiotemporal = "off",
-    ))
-    s <- sanity(m)
-  }
-
-  saveRDS(m, file = here(paste0(
-    "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
-  )))
 }
+
+set_priors <- sdmTMBpriors(
+  matern_s = pc_matern(range_gt = 5, sigma_lt = 3),
+  matern_st = pc_matern(range_gt = 5, sigma_lt = 3)
+)
+ctrl <- sdmTMBcontrol(newton_loops = 1L)
+
+fitted_type <- "delta-Gamma model with spatial and spatiotemporal random fields"
+m <- try(sdmTMB(
+  formula,
+  data,
+  mesh = spde,
+  time = "year",
+  family = family,
+  spatial = "on",
+  offset = log(data$area_swept),
+  spatiotemporal = "iid",
+  share_range = params$share_range,
+  anisotropy = params$anisotropy,
+  silent = params$silent,
+  control = ctrl
+))
+
+s <- sanity(m)
+
+if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
+  fitted_type <- "delta-Gamma model with spatial random fields"
+  m1 <- try(update(m, spatiotemporal = list("off", "iid")))
+  s <- sanity(m)
+}
+
+if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
+  fitted_type <- "Tweedie model with spatial and spatiotemporal random fields"
+  m <- try(update(
+    m,
+    family = tweedie(),
+    spatiotemporal = "iid"
+  ))
+  s <- sanity(m)
+}
+
+if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
+  fitted_type <- "Tweedie model with spatial random fields"
+  m <- try(update(
+    m,
+    family = tweedie(),
+    spatiotemporal = "off",
+  ))
+  s <- sanity(m)
+}
+
+m$fitted_type <- fitted_type
+saveRDS(m, file = here(paste0(
+  "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
+)))
 ```
 
-The fitted model:
-
-```{r read-model, warning = TRUE, message = TRUE}
+```{r read-model, warning = TRUE, message = TRUE, eval=!update_model}
 m <- readRDS(here(paste0(
   "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
 )))
+```
+
+The fitted model is a `r m$fitted_type`.
+
+```{r print-model}
 print(m)
 ```
 
@@ -312,30 +320,30 @@ if (isTRUE(params$anisotropy)) {
 ```
 
 ```{r residuals, warning = FALSE, message = FALSE, eval=params$qq_residuals, fig.cap="QQ residuals"}
-if (!s$all_ok) {
-  plot_index <- FALSE
-  update_index <- FALSE
-  print("Model still not converging.")
-} else {
-  r <- residuals(m, "mle-mcmc", mcmc_warmup = 100, mcmc_iter = 101, model = 1L)
-  r2 <- r != Inf
-  if (!all(r2)) {
-    r3 <- r[r2]
-    qqnorm(r3)
-    qqline(r3)
-    update_index <- FALSE
-    plot_index <- FALSE
-    print(" Some residuals are infinite, so not calculating index.")
-  } else {
-    qqnorm(r, main = "Model 1 QQ plot")
-    qqline(r)
-  }
-  if (length(m$family$family) > 1L) {
-    r <- residuals(m, "mle-mcmc", mcmc_warmup = 100, mcmc_iter = 101, model = 2L)
-    qqnorm(r, main = "Model 2 QQ plot")
-    qqline(r)
-  }
-}
+# if (!s$all_ok) {
+#   plot_index <- FALSE
+#   update_index <- FALSE
+#   print("Model still not converging.")
+# } else {
+#   r <- residuals(m, "mle-mcmc", mcmc_warmup = 100, mcmc_iter = 101, model = 1L)
+#   r2 <- r != Inf
+#   if (!all(r2)) {
+#     r3 <- r[r2]
+#     qqnorm(r3)
+#     qqline(r3)
+#     update_index <- FALSE
+#     plot_index <- FALSE
+#     print(" Some residuals are infinite, so not calculating index.")
+#   } else {
+#     qqnorm(r, main = "Model 1 QQ plot")
+#     qqline(r)
+#   }
+#   if (length(m$family$family) > 1L) {
+#     r <- residuals(m, "mle-mcmc", mcmc_warmup = 100, mcmc_iter = 101, model = 2L)
+#     qqnorm(r, main = "Model 2 QQ plot")
+#     qqline(r)
+#   }
+# }
 ```
 
 <!-- Load grid -->
@@ -401,9 +409,71 @@ i <- i %>% mutate(
 saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
 ```
 
-<!-- Plot index -->
+<!-- Map predictions -->
 
-```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index"}
+```{r check-delta}
+is_delta <- length(m$family$family) > 1
+f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
+has_predictions <- file.exists(f)
+```
+
+```{r plot-map-func}
+plot_map <- function(dat, column) {
+  ggplot(dat, aes_string("X", "Y", fill = column)) +
+    geom_polygon(
+      data = coast, aes_string(x = "X", y = "Y", group = "PID"),
+      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+    geom_raster() +
+    scale_colour_viridis_c() +
+    scale_fill_viridis_c() +
+    coord_fixed() +
+    coords +
+    utm_labs
+}
+```
+
+```{r plot-predictions-tw, eval=plot_index && !is_delta && has_predictions, fig.cap="Predictions from the Tweedie model.",eval=FALSE}
+p2 <- readRDS(f)
+plot_map(p2, "est") +
+  facet_wrap(~year) +
+  ggtitle("Fixed + random effects in link space")
+```
+
+```{r plot-predictions-binom, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the binomial model."}
+p2 <- readRDS(f)
+plot_map(p2, "plogis(est1)") +
+  facet_wrap(~year) +
+  labs(fill = "Probability\nof encounter", colour = "Probability\nof encounter") +
+  ggtitle("Binomial model of encounter probability.") +
+  # scale_colour_viridis_c(option = "C") +
+  scale_fill_viridis_c(option = "C", limits = c(0, 1)) +
+  guides(fill = guide_colourbar())
+```
+
+```{r plot-predictions-gamma, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the Gamma model catch given encounter."}
+plot_map(p2, "exp(est2)") +
+  facet_wrap(~year) +
+   scale_fill_viridis_c(
+    trans = "sqrt", na.value = "yellow",
+    limits = c(0, quantile(exp(p2$est2), 0.99))
+  ) +
+  labs(fill = "Biomass per m^2\ngiven encounter", colour = "Biomass per m^2\ngiven encounter") +
+  ggtitle("Gamma model of positive catch.")
+```
+
+```{r plot-biomass, eval=plot_index && has_predictions, fig.cap="Predictions of biomass density."}
+p <- predict(m, newdata = nd, type = "response")
+plot_map(p, "est") +
+  facet_wrap(~year) +
+  scale_fill_viridis_c(
+    trans = "sqrt", na.value = "yellow",
+    limits = c(0, quantile(p$est, 0.99))
+  ) +
+  labs(fill = "Biomass per m^2", colour = "Biomass per m^2") +
+  ggtitle("Overall biomass density estimates")
+```
+
+```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index."}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   i <- readRDS(f)
@@ -430,57 +500,4 @@ if (file.exists(f)) {
   )
   g
 }
-```
-
-<!-- Map predictions -->
-
-```{r check-delta}
-is_delta <- length(m$family$family) > 1
-f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
-has_predictions <- file.exists(f)
-```
-
-```{r plot-map-func}
-plot_map <- function(dat, column) {
-  ggplot(dat, aes_string("X", "Y", fill = column)) +
-    geom_polygon(
-      data = coast, aes_string(x = "X", y = "Y", group = "PID"),
-      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
-    geom_raster() +
-    scale_colour_viridis_c() +
-    scale_fill_viridis_c() +
-    coord_fixed() +
-    coords
-}
-```
-
-```{r plot-predictions-tw, eval=plot_index && !is_delta && has_predictions, fig.cap="Predictions from the Tweedie model."}
-p2 <- readRDS(f)
-plot_map(p2, "est") +
-  facet_wrap(~year) +
-  ggtitle("Fixed + random effects in link space")
-```
-
-```{r plot-predictions-binom, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the binomial model."}
-p2 <- readRDS(f)
-plot_map(p2, "est1") +
-  facet_wrap(~year) +
-  ggtitle("Model 1 fixed + random effects in link space")
-```
-
-```{r plot-predictions-gamma, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the Gamma model component of positive catch."}
-plot_map(p2, "est2") +
-  facet_wrap(~year) +
-  ggtitle("Model 2 fixed + random effects in link space")
-```
-
-```{r plot-biomass, eval=plot_index && has_predictions, fig.cap="Predictions of biomass density."}
-p <- predict(m, newdata = nd, type = "response")
-plot_map(p, "est") +
-  facet_wrap(~year) +
-  scale_fill_viridis_c(
-    trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(p$est, 0.985))
-  ) +
-  ggtitle("Biomass estimates")
 ```
