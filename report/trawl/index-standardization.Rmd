@@ -2,7 +2,7 @@
 title: "Trawl survey geostatistical index standardization for `r paste(params$species)`"
 author: "Philina English and Sean Anderson"
 date: "`r Sys.Date()`"
-output: html_document
+output: bookdown::html_document2
 params:
     species: "Canary Rockfish"
     region: "SYN WCHG"
@@ -60,6 +60,7 @@ stopifnot(all(unlist(lapply(
 ))))
 ```
 
+
 ```{r params}
 species <- params$species
 region <- params$region
@@ -69,12 +70,25 @@ update_index <- params$update_index
 plot_index <- TRUE
 # paste("survey =", region)
 # paste("model type =", params$covariate_type)
-print(params)
 family <- delta_gamma()
 
 if (region == "Coast-wide trawl surveys") {
   region <- c("SYN QCS", "SYN HS", "SYN WCVI", "SYN WCHG")
 }
+```
+
+Settings used in this report:
+
+```{r print-params}
+.p <- params
+.p$starr_mode <- NULL
+.p$update_index <- NULL
+.p$update_model <- NULL
+.p$silent <- NULL
+.p$qq_residuals <- NULL
+if (region == "SYN WCHG") .p$cutoff <- .p$cutoff_wchg
+.p$cutoff_wchg <- NULL
+print(.p)
 ```
 
 <!-- Get species data  -->
@@ -119,7 +133,7 @@ coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
 coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
 ```
 
-```{r raw-data-plot}
+```{r raw-data-plot, fig.cap="Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density."}
 french <- FALSE
 en2fr <- rosettafish::en2fr
 plot_multiyear_survey_sets <- function(dat, survey_abbrev,
@@ -158,7 +172,7 @@ plot_multiyear_survey_sets(data, region)
 
 <!-- Make mesh -->
 
-```{r mesh, fig.width=8.5, fig.height=8.5, out.width="50%", fig.cap="SPDE mesh used during model fitting."}
+```{r mesh, fig.width=8.5, fig.height=8.5, out.width="50%", fig.cap="SPDE (stochastic partial differential equation) mesh used during model fitting."}
 # standard settings
 cutoff <- params$cutoff
 spatiotemporal <- "iid"
@@ -228,13 +242,11 @@ if (update_model) {
   s <- sanity(m)
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # turn off spatiotemporal fields for binomial
     m1 <- try(update(m, spatiotemporal = list("off", "iid")))
     s <- sanity(m)
   }
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # try tweedie
     m <- try(update(
       m,
       family = tweedie(),
@@ -244,7 +256,6 @@ if (update_model) {
   }
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # try tweedie without spatiotemporal
     m <- try(update(
       m,
       family = tweedie(),
@@ -259,18 +270,31 @@ if (update_model) {
 }
 ```
 
+The fitted model:
 
 ```{r read-model, warning = TRUE, message = TRUE}
 m <- readRDS(here(paste0(
   "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
 )))
-m
+print(m)
+```
 
+Basic checks of model convergence:
+
+```{r sanity, message=TRUE, warning=TRUE}
 s <- sanity(m)
+```
 
-tidy(m, effects = "ran_pars", conf.int = TRUE)
+Dispersion and random effect parameter estimates:
+
+```{r tidy}
+tidy(m, effects = "ran_pars", conf.int = TRUE) %>% 
+  tibble::as_tibble() %>% 
+  select(-std.error)
 if (length(m$call$family) > 1L) {
-  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L)
+  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L) %>%
+    tibble::as_tibble() %>% 
+    select(-std.error)
 }
 ```
 
