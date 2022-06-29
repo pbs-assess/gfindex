@@ -1,8 +1,8 @@
 ---
-title: "Trawl survey index standardization for `r paste(params$species)`"
+title: "Trawl survey geostatistical index standardization for `r paste(params$species)`"
 author: "Philina English and Sean Anderson"
 date: "`r Sys.Date()`"
-output: html_document
+output: bookdown::html_document2
 params:
     species: "Canary Rockfish"
     region: "SYN WCHG"
@@ -20,13 +20,15 @@ params:
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(
-  fig.width = 7,
+  fig.width = 11,
   fig.asp = 0.618,
+  out.width = "80%",
   echo = FALSE, 
   warning = FALSE, 
   message = FALSE,
   comment = "#>",
-  collapse = TRUE
+  collapse = TRUE,
+  fig.align = "center"
 )
 
 library(dplyr)
@@ -36,7 +38,7 @@ library(here)
 
 # options(scipen = 999)
 theme_set(
-  theme_bw(base_size = 11)
+  theme_bw(base_size = 14)
 )
 
 dir.create(here("predictions"), showWarnings = FALSE)
@@ -58,6 +60,7 @@ stopifnot(all(unlist(lapply(
 ))))
 ```
 
+
 ```{r params}
 species <- params$species
 region <- params$region
@@ -68,7 +71,6 @@ update_index <- params$update_index
 plot_index <- TRUE
 # paste("survey =", region)
 # paste("model type =", params$covariate_type)
-print(params)
 family <- delta_gamma()
 
 if (region == "Coast-wide trawl surveys") {
@@ -76,15 +78,27 @@ if (region == "Coast-wide trawl surveys") {
 }
 ```
 
+Settings used in this report:
+
+```{r print-params}
+.p <- params
+.p$starr_mode <- NULL
+.p$update_index <- NULL
+.p$update_model <- NULL
+.p$silent <- NULL
+.p$qq_residuals <- NULL
+if (region == "SYN WCHG") .p$cutoff <- .p$cutoff_wchg
+.p$cutoff_wchg <- NULL
+print(.p)
+```
+
 <!-- Get species data  -->
 
 ```{r dat}
 spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
 
-data <- readRDS(here("data/all-survey-sets-2021.rds")) %>%
-  rename(survey_series_id = survey_series_id.x) %>%
+data <- readRDS(here("data/all-survey-sets-2021-select.rds")) %>%
   filter(species_common_name == tolower(species)) %>%
-  filter(depth_m > 0) %>%
   filter(survey_abbrev %in% region)
 
 # change from per m2 to per km2:
@@ -120,15 +134,16 @@ coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
 coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
 ```
 
-```{r raw-data-plot}
+```{r raw-data-plot, fig.cap="Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density."}
 french <- FALSE
 en2fr <- rosettafish::en2fr
 plot_multiyear_survey_sets <- function(dat, survey_abbrev,
-  density_lab = "", french=FALSE) {
-  density_lab = paste(en2fr("Density",translate=french),expression(~(kg/km^2)))
+                                       density_lab = "", french = FALSE) {
+  density_lab <- paste(en2fr("Density", translate = french), expression((kg / km^2)))
   ggplot(filter(dat, density > 0), aes(X, Y,
     size = density,
-    fill = density)) +
+    fill = density
+  )) +
     scale_size_area(max_size = 8) +
     geom_point(data = filter(dat, density == 0), pch = 4, 
       size = 0.7, col = "grey60") +
@@ -137,32 +152,26 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
     facet_wrap(~year) +
     geom_polygon(
       data = coast, aes_string(x = "X", y = "Y", group = "PID"),
-      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE
+    ) +
     scale_fill_viridis_c(trans = "sqrt") +
-    labs(fill = density_lab,
-      size = density_lab, x = en2fr("Easting", translate=french),
-      y = en2fr("Northing", translate=french)) +
+    labs(
+      fill = density_lab,
+      size = density_lab, x = en2fr("Easting", translate = french),
+      y = en2fr("Northing", translate = french)
+    ) +
     guides(
       size = guide_legend(order = 1),
-      fill = guide_colorbar(order = 0))
+      fill = guide_colorbar(order = 0)
+    )
 }
 
 plot_multiyear_survey_sets(data, region)
-# col <- RColorBrewer::brewer.pal(3, "Blues")
-# ggplot(filter(data, density > 0), aes_string("X", "Y", size = "density")) +
-#   geom_point(data = filter(data, density == 0), pch = 4, size = 0.8, colour = "grey60") +
-#   geom_point(colour = col[3]) +
-#   scale_size_area() +
-#   # scale_colour_viridis_c(trans = "log10") +
-#   coord_fixed() +
-#   labs(colour = "Density (kg/m^2)", size = "Density (kg/m^2)") +
-#   facet_wrap(~year) +
-#   ggtitle("Raw data")
 ```
 
 <!-- Make mesh -->
 
-```{r mesh, fig.width=5.5, fig.height=5.5}
+```{r mesh, fig.width=8.5, fig.height=8.5, out.width="50%", fig.cap="SPDE (stochastic partial differential equation) mesh used during model fitting."}
 # standard settings
 cutoff <- params$cutoff
 spatiotemporal <- "iid"
@@ -175,10 +184,14 @@ if (region %in% c("SYN WCHG")) {
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
 ggplot() +
+  geom_polygon(
+    data = coast, aes_string(x = "X", y = "Y", group = "PID"),
+    fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+  scale_fill_viridis_c(trans = "sqrt") +
   inlabru::gg(spde$mesh) +
   geom_point(data = data, mapping = aes(X, Y), alpha = 0.5, pch = 21) +
-  coord_equal() +
-  ggtitle("SPDE mesh")
+  ggtitle("SPDE mesh") +
+  coord_equal(expand = FALSE, xlim = range(data$X) + c(-30, 30), ylim = range(data$Y) + c(-30, 30))
 # spde$mesh$n
 ```
 
@@ -236,13 +249,11 @@ if (update_model) {
   s <- sanity(m)
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # turn off spatiotemporal fields for binomial
     m1 <- try(update(m, spatiotemporal = list("off", "iid")))
     s <- sanity(m)
   }
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # try tweedie
     m <- try(update(
       m,
       family = tweedie(),
@@ -252,7 +263,6 @@ if (update_model) {
   }
 
   if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
-    # try tweedie without spatiotemporal
     m <- try(update(
       m,
       family = tweedie(),
@@ -267,28 +277,41 @@ if (update_model) {
 }
 ```
 
+The fitted model:
 
 ```{r read-model, warning = TRUE, message = TRUE}
 m <- readRDS(here(paste0(
   "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
 )))
-m
+print(m)
+```
 
+Basic checks of model convergence:
+
+```{r sanity, message=TRUE, warning=TRUE}
 s <- sanity(m)
+```
 
-tidy(m, effects = "ran_pars", conf.int = TRUE)
+Dispersion and random effect parameter estimates:
+
+```{r tidy}
+tidy(m, effects = "ran_pars", conf.int = TRUE) %>% 
+  tibble::as_tibble() %>% 
+  select(-std.error)
 if (length(m$call$family) > 1L) {
-  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L)
+  tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L) %>%
+    tibble::as_tibble() %>% 
+    select(-std.error)
 }
 ```
 
-```{r plot-aniso}
+```{r plot-aniso, fig.cap="Anisotropy ranges"}
 if (isTRUE(params$anisotropy)) {
   sdmTMB:::plot_anisotropy2(m)
 }
 ```
 
-```{r residuals, warning = FALSE, message = FALSE, eval=params$qq_residuals}
+```{r residuals, warning = FALSE, message = FALSE, eval=params$qq_residuals, fig.cap="QQ residuals"}
 if (!s$all_ok) {
   plot_index <- FALSE
   update_index <- FALSE
@@ -321,28 +344,12 @@ if (!s$all_ok) {
 nd <- readRDS(here("grids/synoptic_grid.rds")) %>%
   filter(survey == region)
 
-if (update_index) {
-  if (region == "SYN QCS") {
-    model_ssid <- c(1)
-  }
+model_ssid <- data$survey_series_id[1]
 
-  if (region == "SYN HS") {
-    model_ssid <- c(3)
-  }
-
-  if (region == "SYN WCVI") {
-    model_ssid <- c(4)
-  }
-
-  if (region == "SYN WCHG") {
-    model_ssid <- c(16)
-  }
-
-  if (region == "Coast-wide trawl surveys") {
-    nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>%
-      mutate(cell_area = 4e+6)
-  }
-}
+# if (region == "Coast-wide trawl surveys") {
+#   nd <- readRDS(here("data-generated/nd_whole_coast_index.rds")) %>%
+#     mutate(cell_area = 4e+6)
+# }
 
 nd$cell_area <- 4e+6
 ```
@@ -396,7 +403,7 @@ saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type,
 
 <!-- Plot index -->
 
-```{r plot-index, eval=plot_index}
+```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index"}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   i <- readRDS(f)
@@ -427,48 +434,48 @@ if (file.exists(f)) {
 
 <!-- Map predictions -->
 
-```{r plot-predictions, eval=plot_index}
+```{r check-delta}
+is_delta <- length(m$family$family) > 1
 f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
+has_predictions <- file.exists(f)
+```
+
+```{r plot-map-func}
 plot_map <- function(dat, column) {
   ggplot(dat, aes_string("X", "Y", fill = column)) +
     geom_polygon(
       data = coast, aes_string(x = "X", y = "Y", group = "PID"),
       fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
-    geom_tile() +
+    geom_raster() +
     scale_colour_viridis_c() +
     scale_fill_viridis_c() +
     coord_fixed() +
     coords
 }
-
-if (file.exists(f)) {
-  p2 <- readRDS(f)
-  if (length(m$family$family) == 1L) {
-    plot_map(p2, "est") +
-      facet_wrap(~year) +
-      ggtitle("Fixed + random effects in link space")
-  } else {
-    plot_map(p2, "est1") +
-      facet_wrap(~year) +
-      ggtitle("Model 1 fixed + random effects in link space")
-  }
-}
 ```
 
-```{r plot-index2, eval=plot_index}
-if (file.exists(f)) {
-  if (length(m$family$family) > 1L) {
-    plot_map(p2, "est2") +
-      facet_wrap(~year) +
-      ggtitle("Model 2 fixed + random effects in link space")
-  }
-}
+```{r plot-predictions-tw, eval=plot_index && !is_delta && has_predictions, fig.cap="Predictions from the Tweedie model."}
+p2 <- readRDS(f)
+plot_map(p2, "est") +
+  facet_wrap(~year) +
+  ggtitle("Fixed + random effects in link space")
 ```
 
+```{r plot-predictions-binom, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the binomial model."}
+p2 <- readRDS(f)
+plot_map(p2, "est1") +
+  facet_wrap(~year) +
+  ggtitle("Model 1 fixed + random effects in link space")
+```
 
-```{r plot-biomass, eval=plot_index}
+```{r plot-predictions-gamma, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the Gamma model component of positive catch."}
+plot_map(p2, "est2") +
+  facet_wrap(~year) +
+  ggtitle("Model 2 fixed + random effects in link space")
+```
+
+```{r plot-biomass, eval=plot_index && has_predictions, fig.cap="Predictions of biomass density."}
 p <- predict(m, newdata = nd, type = "response")
-
 plot_map(p, "est") +
   facet_wrap(~year) +
   scale_fill_viridis_c(
