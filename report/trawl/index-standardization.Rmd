@@ -109,7 +109,7 @@ data$area_swept2 <- data$tow_length_m * data$doorspread_m
 data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
 # data$area_swept <- data$area_swept2
 
-# data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
+data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 data <- dplyr::filter(data, !is.na(area_swept)) # should be captured by above line
 
 # plot(data$density_kgpm2, data$catch_weight / data$area_swept)
@@ -179,9 +179,6 @@ spatiotemporal <- "iid"
 
 if (region %in% c("SYN WCHG")) {
   cutoff <- params$cutoff_wchg
-  if (species %in% c("Canary Rockfish")){ # list species not well captured in limited area surveyed in 2014
-  data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
-  }
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
 ggplot() +
