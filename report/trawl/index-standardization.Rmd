@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: bookdown::html_document2
 params:
     species: "Pacific Cod"
-    region: "SYN QCS"
+    region: "SYN WCHG"
     covariate_type: "with depth" # or "no depth"
     update_model: TRUE # will over write past models; will always attempt if none exists
     update_index: TRUE
@@ -109,7 +109,6 @@ data$area_swept2 <- data$tow_length_m * data$doorspread_m
 data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
 # data$area_swept <- data$area_swept2
 
-data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 data <- dplyr::filter(data, !is.na(area_swept)) # should be captured by above line
 
 # plot(data$density_kgpm2, data$catch_weight / data$area_swept)
@@ -134,6 +133,8 @@ coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
 coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
 utm_labs <- labs(x = "Easting", y = "Northing")
 ```
+
+`r if (params$region == "SYN WCHG") "SYN WCHG raw data are plotted but are excluded from index standardization."`
 
 ```{r raw-data-plot, fig.cap="Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density."}
 french <- FALSE
@@ -168,6 +169,7 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
 }
 
 plot_multiyear_survey_sets(data, region)
+data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 ```
 
 <!-- Make mesh -->
@@ -431,6 +433,9 @@ plot_map <- function(dat, column) {
 
 ```{r plot-predictions-tw, eval=plot_index && !is_delta && has_predictions, fig.cap="Predictions from the Tweedie model.",eval=FALSE}
 p2 <- readRDS(f)
+if (params$region == "SYN WCHG") {
+  p2 <- rbind(p2, p2[1,,drop=FALSE] %>% mutate(year = 2014L, est = NA))
+}
 plot_map(p2, "est") +
   facet_wrap(~year) +
   ggtitle("Fixed + random effects in link space")
@@ -438,6 +443,9 @@ plot_map(p2, "est") +
 
 ```{r plot-predictions-binom, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the binomial model."}
 p2 <- readRDS(f)
+if (params$region == "SYN WCHG") {
+  p2 <- rbind(p2, p2[1,,drop=FALSE] %>% mutate(year = 2014L, est1 = NA, est2 = NA))
+}
 plot_map(p2, "plogis(est1)") +
   facet_wrap(~year) +
   labs(fill = "Probability\nof encounter", colour = "Probability\nof encounter") +
@@ -452,7 +460,7 @@ plot_map(p2, "exp(est2)") +
   facet_wrap(~year) +
    scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(exp(p2$est2), 0.99))
+    limits = c(0, quantile(exp(p2$est2), 0.99, na.rm = TRUE))
   ) +
   labs(fill = "Biomass per m^2\ngiven encounter", colour = "Biomass per m^2\ngiven encounter") +
   ggtitle("Gamma model of positive catch.")
@@ -460,11 +468,14 @@ plot_map(p2, "exp(est2)") +
 
 ```{r plot-biomass, eval=plot_index && has_predictions, fig.cap="Predictions of biomass density."}
 p <- predict(m, newdata = nd, type = "response")
+if (params$region == "SYN WCHG") {
+  p <- rbind(p, p[1,,drop=FALSE] %>% mutate(year = 2014L, est = NA))
+}
 plot_map(p, "est") +
   facet_wrap(~year) +
   scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(p$est, 0.99))
+    limits = c(0, quantile(p$est, 0.99, na.rm = TRUE))
   ) +
   labs(fill = "Biomass per m^2", colour = "Biomass per m^2") +
   ggtitle("Overall biomass density estimates")
