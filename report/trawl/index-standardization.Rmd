@@ -139,7 +139,11 @@ french <- FALSE
 en2fr <- rosettafish::en2fr
 plot_multiyear_survey_sets <- function(dat, survey_abbrev,
                                        density_lab = "", french = FALSE) {
-  density_lab <- paste(en2fr("Density", translate = french), expression((kg / km^2)))
+  density_lab <- if (french){
+    bquote(atop("Densité de la biomasse",~(kg/km^2)))
+  } else {
+    bquote(atop("Biomass density",~(kg/km^2)))
+  }
   ggplot(filter(dat, density > 0), aes(X, Y,
     size = density,
     fill = density
