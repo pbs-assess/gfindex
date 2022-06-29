@@ -6,8 +6,8 @@ output: html_document
 params:
     species: "Canary Rockfish"
     # region: "SYN WCHG"
-    # region: "SYN QCS"
-    region: "SYN HS"
+    region: "SYN QCS"
+    # region: "SYN HS"
     # region: "SYN WCVI"
     # survey: "Coast-wide trawl surveys"
     # covariate_type: "no depth" # or "with depth
@@ -67,11 +67,21 @@ spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
 data <- readRDS(here("data/all-survey-sets-2021.rds")) %>%
   rename(survey_series_id = survey_series_id.x) %>%
   filter(species_common_name == tolower(species)) %>%
-  filter(depth_m > 0)
+  filter(depth_m > 0) %>% 
+  filter(survey_abbrev %in% region)
 
 # change from per m2 to per km2:
 data$density <- data[["density_kgpm2"]] * 1000000
 data$log_depth <- log(data$depth_m)
+data$area_swept1 <- data$doorspread_m * (data$speed_mpm * data$duration_min)
+data$area_swept2 <- data$tow_length_m * data$doorspread_m
+data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
+# data$area_swept <- data$area_swept2
+
+# plot(data$density_kgpm2, data$catch_weight / data$area_swept)
+# cor(data$density_kgpm2, data$catch_weight / data$area_swept)
+# cor(data$density_kgpm2, data$catch_weight / data$area_swept1)
+# cor(data$density_kgpm2, data$catch_weight / data$area_swept2)
 
 positive_sets <- data %>%
   filter(density != 0) %>%
@@ -135,7 +145,7 @@ if (update_model) {
     time = "year",
     family = family,
     spatial = "on",
-    offset = log(data$area_km2),
+    offset = log(data$area_swept),
     spatiotemporal = "iid",
     share_range = params$share_range,
     anisotropy = params$anisotropy,
@@ -154,6 +164,7 @@ if (update_model) {
       time = "year",
       family = family,
       spatial = list("on", "on"),
+      offset = log(data$area_swept),
       spatiotemporal = list("off", "iid"),
       share_range = params$share_range,
       anisotropy = params$anisotropy,
@@ -172,6 +183,7 @@ if (update_model) {
       time = "year",
       family = tweedie(),
       spatial = "on",
+      offset = log(data$area_swept),
       spatiotemporal = "iid",
       share_range = params$share_range,
       anisotropy = params$anisotropy,
@@ -190,6 +202,7 @@ if (update_model) {
       time = "year",
       family = tweedie(),
       spatial = "on",
+      offset = log(data$area_swept),
       spatiotemporal = "off",
       share_range = params$share_range,
       anisotropy = params$anisotropy,
