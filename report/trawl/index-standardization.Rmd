@@ -64,6 +64,7 @@ region <- params$region
 covariate_type <- gsub(" ", "-", gsub("\\/", "-", tolower(params$covariate_type)))
 update_model <- params$update_model
 update_index <- params$update_index
+
 plot_index <- TRUE
 # paste("survey =", region)
 # paste("model type =", params$covariate_type)
@@ -94,7 +95,7 @@ data$area_swept2 <- data$tow_length_m * data$doorspread_m
 data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
 # data$area_swept <- data$area_swept2
 
-data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
+# data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 data <- dplyr::filter(data, !is.na(area_swept)) # should be captured by above line
 
 # plot(data$density_kgpm2, data$catch_weight / data$area_swept)
@@ -129,10 +130,10 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
     size = density,
     fill = density)) +
     scale_size_area(max_size = 8) +
-    geom_point(data = filter(dat, density == 0), pch = 4,
-      size = 1, col = "grey60") +
+    geom_point(data = filter(dat, density == 0), pch = 4, 
+      size = 0.7, col = "grey60") +
     coords +
-    geom_point(pch = 21) +
+    geom_point(alpha = 0.5, pch = 21) +
     facet_wrap(~year) +
     geom_polygon(
       data = coast, aes_string(x = "X", y = "Y", group = "PID"),
@@ -168,6 +169,9 @@ spatiotemporal <- "iid"
 
 if (region %in% c("SYN WCHG")) {
   cutoff <- params$cutoff_wchg
+  if (species %in% c("Canary Rockfish")){ # list species not well captured in limited area surveyed in 2014
+  data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
+  }
 }
 spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
 ggplot() +
@@ -179,13 +183,18 @@ ggplot() +
 ```
 
 ```{r load-cached}
-# Check if a model already exists
+# Check if a model and/or index already exist
 dir.create("models", showWarnings = FALSE)
 f <- here(paste0("models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   m <- readRDS(f)
 } else {
   update_model <- TRUE
+}
+
+f2 <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
+if (!file.exists(f2)) {
+  update_index <- TRUE
 }
 ```
 
@@ -309,11 +318,6 @@ if (!s$all_ok) {
 <!-- Load grid -->
 
 ```{r load-grid, message=FALSE, warning=FALSE}
-f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
-if (!file.exists(f)) {
-  update_index <- TRUE
-}
-
 nd <- readRDS(here("grids/synoptic_grid.rds")) %>%
   filter(survey == region)
 
