@@ -134,9 +134,7 @@ coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = 
 utm_labs <- labs(x = "Easting", y = "Northing")
 ```
 
-`r if (params$region == "SYN WCHG") "SYN WCHG raw data are plotted but are excluded from index standardization."`
-
-```{r raw-data-plot, fig.cap="Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density."}
+```{r raw-data-plot, fig.cap=paste("Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density.", if (params$region == 'SYN WCHG') "SYN WCHG 2014 raw data are plotted but are excluded from index standardization.")}
 french <- FALSE
 en2fr <- rosettafish::en2fr
 plot_multiyear_survey_sets <- function(dat, survey_abbrev,
