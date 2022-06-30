@@ -253,7 +253,7 @@ s <- sanity(m)
 
 if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
   fitted_type <- "delta-Gamma model without spatiotemporal random fields on detection probability"
-  m1 <- try(update(m, spatiotemporal = list("off", "iid")))
+  m <- try(update(m, spatiotemporal = list("off", "iid")))
   s <- sanity(m)
 }
 
@@ -307,7 +307,7 @@ Dispersion and random effect parameter estimates:
 tidy(m, effects = "ran_pars", conf.int = TRUE) %>% 
   tibble::as_tibble() %>% 
   select(-std.error)
-if (length(m$call$family) > 1L) {
+if (length(m$family$family) > 1L) {
   tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L) %>%
     tibble::as_tibble() %>% 
     select(-std.error)
@@ -458,13 +458,14 @@ plot_map(p2, "plogis(est1)") +
 ```
 
 ```{r plot-predictions-gamma, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the Gamma model catch given encounter."}
-plot_map(p2, "exp(est2)") +
+plot_map(p2, "exp(est2)*1000000") +
   facet_wrap(~year) +
    scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(exp(p2$est2), 0.99, na.rm = TRUE))
+    limits = c(0, quantile(exp(p2$est2)*1000000, 0.99, na.rm = TRUE))
   ) +
-  labs(fill = expression("Biomass per"~m^2~"\ngiven encounter"), colour = expression("Biomass per"~m^2~"\ngiven encounter")) +
+  labs(fill = bquote(atop("Biomass per"~km^2,"given encounter")), 
+       colour = bquote(atop("Biomass per"~km^2,"given encounter"))) +
   ggtitle("Gamma model of positive catch.")
 ```
 
@@ -473,13 +474,13 @@ p <- predict(m, newdata = nd, type = "response")
 if (params$region == "SYN WCHG") {
   p <- rbind(p, p[1,,drop=FALSE] %>% mutate(year = 2014L, est = NA))
 }
-plot_map(p, "est") +
+plot_map(p, "est*1000000") +
   facet_wrap(~year) +
   scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(p$est, 0.99, na.rm = TRUE))
+    limits = c(0, quantile(p$est*1000000, 0.99, na.rm = TRUE))
   ) +
-  labs(fill = expression("Biomass per"~m^2), colour = expression("Biomass per"~m^2)) +
+  labs(fill = expression("Biomass per"~km^2), colour = expression("Biomass per"~km^2)) +
   ggtitle("Overall biomass density estimates")
 ```
 
