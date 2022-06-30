@@ -35,6 +35,7 @@ library(dplyr)
 library(ggplot2)
 library(sdmTMB)
 library(here)
+library(cowplot)
 
 # options(scipen = 999)
 theme_set(
@@ -67,6 +68,7 @@ region <- params$region
 covariate_type <- gsub(" ", "-", gsub("\\/", "-", tolower(params$covariate_type)))
 update_model <- params$update_model
 update_index <- params$update_index
+plot_depth <- params$covariate_type=="with depth"
 
 plot_index <- TRUE
 # paste("survey =", region)
@@ -278,6 +280,7 @@ if ((!s$all_ok && isTRUE(family$delta)) || class(m) == "try-error") {
 }
 
 m$fitted_type <- fitted_type
+
 saveRDS(m, file = here(paste0(
   "models/m-", spp, "-", ssid_string, "-", covariate_type, ".rds"
 )))
@@ -318,6 +321,72 @@ if (length(m$family$family) > 1L) {
 if (isTRUE(params$anisotropy)) {
   sdmTMB:::plot_anisotropy2(m)
 }
+```
+
+```{r check-delta}
+is_delta <- length(m$family$family) > 1
+```
+
+```{r plot-depth, eval=plot_depth && is_delta, fig.cap="Depth effect", fig.width=6, fig.asp=1, out.width = "40%"}
+nd <- data.frame(
+  log_depth = seq(
+    quantile(data$log_depth, 0.025),
+    quantile(data$log_depth, 0.975),
+    length.out = 30
+  ),
+  year = max(data$year) # a chosen year
+)
+
+pd1 <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA, model = 1)
+
+g1 <- ggplot(pd1, aes(exp(log_depth), m$family[[1]]$linkinv(est),
+  ymin = m$family[[1]]$linkinv(est - 1.96 * est_se),
+  ymax =m$family[[1]]$linkinv(est + 1.96 * est_se)
+)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.4) +
+  scale_x_continuous() +
+  coord_cartesian(expand = F) +
+  labs(x = "Depth (m)", y = "Probability encountered") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank())
+
+pd2 <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA, model = 2)
+
+g2 <- ggplot(pd2, aes(exp(log_depth), exp(est),
+  ymin = exp(est - 1.96 * est_se),
+  ymax = exp(est + 1.96 * est_se)
+)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.4) +
+  scale_x_continuous() +
+  coord_cartesian(expand = F) +
+  labs(x = "Depth (m)", y = "Biomass when encountered")
+
+
+cowplot::plot_grid(g1, g2, ncol = 1, align = "v")
+```
+
+```{r plot-depth2, eval=plot_depth && !is_delta, fig.width=6, fig.cap="Depth effect", out.width = "40%"}
+nd <- data.frame(
+  log_depth = seq(min(data$log_depth),
+    max(data$log_depth),
+    length.out = 30
+  ),
+  year = max(data$year) # a chosen year
+)
+
+pd <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA)
+
+ggplot(pd, aes(exp(log_depth), exp(est),
+  ymin = exp(est - 1.96 * est_se),
+  ymax = exp(est + 1.96 * est_se)
+)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.4) +
+  scale_x_continuous() +
+  coord_cartesian(expand = F) +
+  labs(x = "Depth (m)", y = "Biomass density")
 ```
 
 ```{r residuals, warning = FALSE, message = FALSE, eval=params$qq_residuals, fig.cap="QQ residuals"}
@@ -412,8 +481,7 @@ saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type,
 
 <!-- Map predictions -->
 
-```{r check-delta}
-is_delta <- length(m$family$family) > 1
+```{r check-pred}
 f <- here(paste0("predictions/p-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 has_predictions <- file.exists(f)
 ```
