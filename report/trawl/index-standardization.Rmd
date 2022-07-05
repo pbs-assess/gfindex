@@ -4,7 +4,7 @@ author: ""
 date: "`r Sys.Date()`"
 output: bookdown::html_document2
 params:
-    species: "Pacific Cod"
+    species: "Canary Rockfish"
     region: "SYN WCVI"
     covariate_type: "with depth" # or "no depth"
     update_model: TRUE # will over write past models; will always attempt if none exists
@@ -369,8 +369,9 @@ cowplot::plot_grid(g1, g2, ncol = 1, align = "v")
 
 ```{r plot-depth2, eval=plot_depth && !is_delta, fig.width=6, fig.cap="Depth effect", out.width = "40%"}
 nd <- data.frame(
-  log_depth = seq(min(data$log_depth),
-    max(data$log_depth),
+  log_depth = seq(
+    quantile(data$log_depth, 0.025),
+    quantile(data$log_depth, 0.975),
     length.out = 30
   ),
   year = max(data$year) # a chosen year
