@@ -23,8 +23,8 @@ knitr::opts_chunk$set(
   fig.width = 11,
   fig.asp = 0.618,
   out.width = "80%",
-  echo = FALSE, 
-  warning = FALSE, 
+  echo = FALSE,
+  warning = FALSE,
   message = FALSE,
   comment = "#>",
   collapse = TRUE,
@@ -37,7 +37,6 @@ library(sdmTMB)
 library(here)
 library(cowplot)
 
-# options(scipen = 999)
 theme_set(
   theme_bw(base_size = 14)
 )
@@ -56,7 +55,10 @@ stopifnot(is.numeric(params$cutoff_wchg))
 stopifnot(params$cutoff > 0)
 stopifnot(params$cutoff_wchg > 0)
 stopifnot(all(unlist(lapply(
-  list(params$update_index, params$share_range, params$anisotropy, params$qq_residuals, params$starr_mode),
+  list(
+    params$update_index, params$share_range, params$anisotropy,
+    params$qq_residuals, params$starr_mode
+  ),
   is.logical
 ))))
 ```
@@ -68,11 +70,9 @@ region <- params$region
 covariate_type <- gsub(" ", "-", gsub("\\/", "-", tolower(params$covariate_type)))
 update_model <- params$update_model
 update_index <- params$update_index
-plot_depth <- params$covariate_type=="with depth"
+plot_depth <- params$covariate_type == "with depth"
 
 plot_index <- TRUE
-# paste("survey =", region)
-# paste("model type =", params$covariate_type)
 family <- delta_gamma()
 
 if (region == "Coast-wide trawl surveys") {
@@ -128,11 +128,15 @@ data <- sdmTMB::add_utm_columns(data, c("longitude", "latitude"), utm_crs = 3260
 ```
 
 ```{r load-coast}
-coast <- gfplot:::load_coastline(range(data$longitude) + c(-0.5, 0.5),
+coast <- gfplot:::load_coastline(
+  range(data$longitude) + c(-0.5, 0.5),
   range(data$latitude) + c(-0.5, 0.5),
   utm_zone = 9
 )
-coords <- coord_equal(expand = FALSE, xlim = range(data$X) + c(-10, 10), ylim = range(data$Y) + c(-10, 10))
+coords <- coord_equal(
+  expand = FALSE, xlim = range(data$X) + c(-10, 10),
+  ylim = range(data$Y) + c(-10, 10)
+)
 utm_labs <- labs(x = "Easting", y = "Northing")
 ```
 
@@ -141,18 +145,20 @@ french <- FALSE
 en2fr <- rosettafish::en2fr
 plot_multiyear_survey_sets <- function(dat, survey_abbrev,
                                        density_lab = "", french = FALSE) {
-  density_lab <- if (french){
-    bquote(atop("Densité de la biomasse",~(kg/km^2)))
+  density_lab <- if (french) {
+    bquote(atop("Densité de la biomasse", ~ (kg / km^2)))
   } else {
-    bquote(atop("Biomass density",~(kg/km^2)))
+    bquote(atop("Biomass density", ~ (kg / km^2)))
   }
   ggplot(filter(dat, density > 0), aes(X, Y,
     size = density,
     fill = density
   )) +
     scale_size_area(max_size = 8) +
-    geom_point(data = filter(dat, density == 0), pch = 4, 
-      size = 0.7, col = "grey60") +
+    geom_point(
+      data = filter(dat, density == 0), pch = 4,
+      size = 0.7, col = "grey60"
+    ) +
     coords +
     geom_point(alpha = 0.8, pch = 21) +
     facet_wrap(~year) +
@@ -172,14 +178,15 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
     )
 }
 
-data %>% arrange(-density) %>% plot_multiyear_survey_sets(., region)
+data %>%
+  arrange(-density) %>%
+  plot_multiyear_survey_sets(., region)
 data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 ```
 
 <!-- Make mesh -->
 
 ```{r mesh, fig.width=8.5, fig.height=8.5, out.width="50%", fig.cap="SPDE (stochastic partial differential equation) mesh used during model fitting."}
-# standard settings
 cutoff <- params$cutoff
 spatiotemporal <- "iid"
 
@@ -190,12 +197,16 @@ spde <- make_mesh(data, xy_cols = c("X", "Y"), cutoff = cutoff)
 ggplot() +
   geom_polygon(
     data = coast, aes_string(x = "X", y = "Y", group = "PID"),
-    fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+    fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE
+  ) +
   scale_fill_viridis_c(trans = "sqrt") +
   inlabru::gg(spde$mesh) +
   geom_point(data = data, mapping = aes(X, Y), alpha = 0.5, pch = 21) +
   ggtitle("SPDE mesh") +
-  coord_equal(expand = FALSE, xlim = range(data$X) + c(-30, 30), ylim = range(data$Y) + c(-30, 30)) +
+  coord_equal(
+    expand = FALSE, xlim = range(data$X) + c(-30, 30),
+    ylim = range(data$Y) + c(-30, 30)
+  ) +
   utm_labs
 # spde$mesh$n
 ```
@@ -307,12 +318,12 @@ s <- sanity(m)
 Dispersion and random effect parameter estimates:
 
 ```{r tidy}
-tidy(m, effects = "ran_pars", conf.int = TRUE) %>% 
-  tibble::as_tibble() %>% 
+tidy(m, effects = "ran_pars", conf.int = TRUE) %>%
+  tibble::as_tibble() %>%
   select(-std.error)
 if (length(m$family$family) > 1L) {
   tidy(m, effects = "ran_pars", conf.int = TRUE, model = 2L) %>%
-    tibble::as_tibble() %>% 
+    tibble::as_tibble() %>%
     select(-std.error)
 }
 ```
@@ -341,15 +352,17 @@ pd1 <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA, model = 1)
 
 g1 <- ggplot(pd1, aes(exp(log_depth), m$family[[1]]$linkinv(est),
   ymin = m$family[[1]]$linkinv(est - 1.96 * est_se),
-  ymax =m$family[[1]]$linkinv(est + 1.96 * est_se)
+  ymax = m$family[[1]]$linkinv(est + 1.96 * est_se)
 )) +
   geom_line() +
   geom_ribbon(alpha = 0.4) +
   scale_x_continuous() +
   coord_cartesian(expand = F) +
   labs(x = "Depth (m)", y = "Probability encountered") +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank())
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank()
+  )
 
 pd2 <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA, model = 2)
 
@@ -492,7 +505,8 @@ plot_map <- function(dat, column) {
   ggplot(dat, aes_string("X", "Y", fill = column)) +
     geom_polygon(
       data = coast, aes_string(x = "X", y = "Y", group = "PID"),
-      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE) +
+      fill = "grey87", col = "grey70", lwd = 0.2, inherit.aes = FALSE
+    ) +
     geom_raster() +
     scale_colour_viridis_c() +
     scale_fill_viridis_c() +
@@ -505,7 +519,7 @@ plot_map <- function(dat, column) {
 ```{r plot-predictions-tw, eval=plot_index && !is_delta && has_predictions, fig.cap="Predictions from the Tweedie model.",eval=FALSE}
 p2 <- readRDS(f)
 if (params$region == "SYN WCHG") {
-  p2 <- rbind(p2, p2[1,,drop=FALSE] %>% mutate(year = 2014L, est = NA))
+  p2 <- rbind(p2, p2[1, , drop = FALSE] %>% mutate(year = 2014L, est = NA))
 }
 plot_map(p2, "est") +
   facet_wrap(~year) +
@@ -515,7 +529,7 @@ plot_map(p2, "est") +
 ```{r plot-predictions-binom, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the binomial model."}
 p2 <- readRDS(f)
 if (params$region == "SYN WCHG") {
-  p2 <- rbind(p2, p2[1,,drop=FALSE] %>% mutate(year = 2014L, est1 = NA, est2 = NA))
+  p2 <- rbind(p2, p2[1, , drop = FALSE] %>% mutate(year = 2014L, est1 = NA, est2 = NA))
 }
 plot_map(p2, "plogis(est1)") +
   facet_wrap(~year) +
@@ -529,27 +543,32 @@ plot_map(p2, "plogis(est1)") +
 ```{r plot-predictions-gamma, eval=plot_index && is_delta && has_predictions, fig.cap="Predictions from the Gamma model catch given encounter."}
 plot_map(p2, "exp(est2)*1000000") +
   facet_wrap(~year) +
-   scale_fill_viridis_c(
+  scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(exp(p2$est2)*1000000, 0.99, na.rm = TRUE))
+    limits = c(0, quantile(exp(p2$est2) * 1000000, 0.99, na.rm = TRUE))
   ) +
-  labs(fill = bquote(atop("Biomass per"~km^2,"given encounter")), 
-       colour = bquote(atop("Biomass per"~km^2,"given encounter"))) +
+  labs(
+    fill = bquote(atop("Biomass per" ~ km^2, "given encounter")),
+    colour = bquote(atop("Biomass per" ~ km^2, "given encounter"))
+  ) +
   ggtitle("Gamma model of positive catch.")
 ```
 
 ```{r plot-biomass, eval=plot_index && has_predictions, fig.cap="Predictions of biomass density."}
 p <- predict(m, newdata = nd, type = "response")
 if (params$region == "SYN WCHG") {
-  p <- rbind(p, p[1,,drop=FALSE] %>% mutate(year = 2014L, est = NA))
+  p <- rbind(p, p[1, , drop = FALSE] %>% mutate(year = 2014L, est = NA))
 }
 plot_map(p, "est*1000000") +
   facet_wrap(~year) +
   scale_fill_viridis_c(
     trans = "sqrt", na.value = "yellow",
-    limits = c(0, quantile(p$est*1000000, 0.99, na.rm = TRUE))
+    limits = c(0, quantile(p$est * 1000000, 0.99, na.rm = TRUE))
   ) +
-  labs(fill = expression("Biomass per"~km^2), colour = expression("Biomass per"~km^2)) +
+  labs(
+    fill = expression("Biomass per" ~ km^2),
+    colour = expression("Biomass per" ~ km^2)
+  ) +
   ggtitle("Overall biomass density estimates")
 ```
 
@@ -558,7 +577,7 @@ f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds
 if (file.exists(f)) {
   i <- readRDS(f)
   g <- ggplot(i, aes(year, est / 1000))
-  
+
   if (!params$starr_mode) {
     g <- g + geom_line(alpha = 0.3, lty = 1, lwd = 0.5) +
       geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000),
