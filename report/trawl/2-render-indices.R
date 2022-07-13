@@ -21,7 +21,8 @@ list_regions <- c(
 # 3. select covariate type: -------------------------------------------
 
 # list_covariate_type <- c("with depth", "no depth")
-list_covariate_type <- c("with depth")
+# list_covariate_type <- c("with depth")
+list_covariate_type <- c("no depth")
 
 # 4. grab the data if needed: -----------------------------------------
 

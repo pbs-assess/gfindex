@@ -24,7 +24,7 @@ species
 # c-o sole
 # cabezon
 # california grenadier
-canary rockfish
+# canary rockfish
 # chilipepper
 # china rockfish
 # copper rockfish
@@ -47,7 +47,7 @@ canary rockfish
 # longnose skate
 # longspine thornyhead
 # north pacific spiny dogfish
-# pacific cod
+pacific cod
 # pacific flatnose
 # pacific grenadier
 # pacific hake

@@ -96,8 +96,9 @@ settings$cutoff_wchg <- NULL
 # print(settings)
 ```
 
-This report shows the output of using a geostatistical model to generate a standardized index of biomass for **`r stringr::str_to_title(params$species)`** from the **`r params$region`** survey.
-The report was run at `lubridate::now()` using sdmTMB version `r packageVersion("sdmTMB")`, TMB version `r packageVersion("TMB")`, and INLA version `r packageVersion("INLA")`.
+This report shows the output of using a geostatistical model to generate a standardized index of biomass for `r stringr::str_to_title(params$species)` from the `r params$region` survey.
+
+The report was run at `r lubridate::now()` using `r R.version.string`, sdmTMB version `r packageVersion("sdmTMB")`, TMB version `r packageVersion("TMB")`, and INLA version `r packageVersion("INLA")`.
 
 ```{r}
 library(glue)
@@ -124,7 +125,7 @@ The following settings were used:
 
 - `r glue("{if (params$anisotropy) 'Do' else 'Do not'} use spatial anisotropy.")`
 
-- `r if (isFALSE(params$anisotropy)) 'Use a penalized complexity (PC) prior on the Matérn covariance parameters such that P(range > 5km) = 0.95 and P(SD < 3) = 0.95.'`
+- `r if (isFALSE(params$anisotropy)) 'Use a penalized complexity (PC) prior on the Matérn covariance parameters such that Pr(range > 5km) = 0.95 and Pr(SD < 3) = 0.95.'`
   
 <!-- Get species data  -->
 
@@ -643,12 +644,15 @@ if (file.exists(f)) {
 }
 ```
 
-```{r index-table, results='asis'}
+```{r index-table}
 i %>%
   mutate(cv = sqrt(exp(se^2) - 1)) %>% 
   select(year, est, lwr, upr, cv) %>% 
   mutate(est = est / 1000, lwr = lwr / 1000, upr = upr / 1000) %>%
   rename(Year = year, Estimate = est, `Lower 95% CI` = lwr, `Upper 95% CI` = upr, CV = cv) %>% 
-  knitr::kable(digits = c(0, 0, 0, 0, 2), caption = "Standardized index of abundance. Estimates are in units of tonnes.")
+  knitr::kable(digits = c(0, 0, 0, 0, 2), caption = "Standardized index of abundance. Estimates are in units of tonnes.") %>% 
+  kableExtra::kable_styling(
+    bootstrap_options = "striped", full_width = FALSE, position = "center"
+  )
 ```
 
