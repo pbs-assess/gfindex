@@ -1,5 +1,5 @@
 ---
-title: "`r params$region` `r params$species` geostatistical index standardization"
+title: "`r params$region` `r stringr::str_to_title(params$species)` `r stringr::str_to_title('geostatistical index standardization')`"
 author: ""
 date: "`r Sys.Date()`"
 output: bookdown::html_document2
@@ -8,14 +8,14 @@ params:
     region: "SYN WCVI"
     covariate_type: "with depth" # or "no depth"
     update_model: TRUE # will over write past models; will always attempt if none exists
-    update_index: TRUE
-    share_range: TRUE
-    anisotropy: FALSE
-    qq_residuals: FALSE
-    silent: TRUE
-    cutoff: 10
-    cutoff_wchg: 7
-    starr_mode: TRUE
+    update_index: TRUE # update the index or use previously cached one? will always attempt if none exists or if update_model is TRUE
+    share_range: TRUE # share range parameter across delta components
+    anisotropy: FALSE # should correlation decay differently by direction? (also turns off PC priors)
+    qq_residuals: FALSE # include QQ residuals (slow, currently disabled)
+    silent: TRUE # suppress model fitting progress
+    cutoff: 10 # minimum triangle length for most surveys
+    cutoff_wchg: 7 # minimum triangle length for WCHG survey
+    starr_mode: TRUE # if TRUE, plot indexes as dots and lines instead of lines and ribbons
 ---
 
 ```{r global_options, include=FALSE}
@@ -37,9 +37,7 @@ library(sdmTMB)
 library(here)
 library(cowplot)
 
-theme_set(
-  theme_bw(base_size = 14)
-)
+theme_set(theme_bw(base_size = 14))
 
 dir.create(here("predictions"), showWarnings = FALSE)
 dir.create(here("indices"), showWarnings = FALSE)
@@ -588,7 +586,7 @@ if (file.exists(f)) {
     alpha = 1, colour = "grey20"
   ) +
     ylab("Biomass (tonnes)") +
-    ggtitle(paste(species), subtitle = paste0(region)) +
+    ggtitle(stringr::str_to_title(species), subtitle = paste0(region)) +
     coord_cartesian(
       ylim = c(0, max(i$upr / 1000) * 1.03),
       expand = FALSE, xlim = range(i$year) + c(-0.25, 0.25)
