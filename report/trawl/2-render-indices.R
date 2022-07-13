@@ -1,104 +1,45 @@
-library(dplyr)
+PARALLEL <- FALSE
+CORES <- floor(parallel::detectCores() / 2 - 1)
 
-## from SOPO repo:
-# data <- readRDS(here::here("data/all-survey-sets-2021.rds")) %>%
-#   rename(survey_series_id = survey_series_id.x) %>%
-#   filter(depth_m > 0) %>%
-#   filter(survey_abbrev %in% c("SYN WCHG", "SYN QCS", "SYN HS", "SYN WCVI"))
-#
-# data <- select(
-#   data,
-#   survey_series_id,
-#   year,
-#   # fishing_event_id,
-#   latitude,
-#   longitude,
-#   grouping_code,
-#   depth_m,
-#   duration_min,
-#   doorspread_m,
-#   speed_mpm,
-#   tow_length_m,
-#   catch_weight,
-#   density_kgpm2,
-#   # catch_count,
-#   survey_abbrev,
-#   species_common_name,
-#   species_science_name
-#   # sample_id
-#   # area_km2
-# )
-# saveRDS(data, here::here("data/all-survey-sets-2021-select.rds"))
+library(dplyr)
+source(here::here("report/trawl/functions.R"))
+if (PARALLEL) setup_parallel(CORES)
+
+# 1. adjust species in report/trawl/spp.txt ---------------------------
+
+list_species <- read_species_list(here::here("report/trawl/spp.txt"))
+
+# 2. select regions: --------------------------------------------------
+
+list_regions <- c(
+  # "SYN QCS"
+  "SYN WCVI"
+  # "SYN HS",
+  # "SYN WCHG"
+)
+
+# 3. select covariate type: -------------------------------------------
+
+# list_covariate_type <- c("with depth", "no depth")
+list_covariate_type <- c("with depth")
+
+# 4. grab the data if needed: -----------------------------------------
 
 f <- here::here("data/all-survey-sets-2021-select.rds")
 if (!file.exists(f)) {
-download.file("https://www.dropbox.com/s/uduck48z9jnkq9f/all-survey-sets-2021-select.rds?dl=1",
-  destfile = f)
-}
-make_dat <- function(r, s, .c) {
-  expand.grid(
-    species = s,
-    region = r,
-    covariate_type = .c,
-    stringsAsFactors = FALSE
-  )
+  dropbox_file <- paste0("https://www.dropbox.com/s/uduck48z9jnkq9f/",
+    "all-survey-sets-2021-select.rds?dl=1")
+  download.file(dropbox_file, destfile = f)
 }
 
-list_regions <- c(
-  "SYN QCS",
-  "SYN WCVI",
-  "SYN HS",
-  "SYN WCHG"
-)
-
-list_species <- readr::read_delim(here::here("report/trawl/spp.txt"),
-  comment = "#", delim = "\n", col_types = "c") %>% pull(species)
-
-list_covariate_type <- c("with depth", "no depth")
+# 5. run the following: -----------------------------------------------
 
 to_fit <- make_dat(list_regions, list_species, list_covariate_type)
-
-# https://github.com/rstudio/rmarkdown/issues/1673
-render_separately <- function(...) {
-  callr::r(
-    function(...) rmarkdown::render(..., envir = globalenv()),
-    args = list(...), show = TRUE
-  )
-}
-
-fit_index <- function(region, species, covariate_type) {
-  spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
-  region_name <- region
-  try({
-    render_separately("report/trawl/index-standardization.Rmd",
-      params = list(
-        species = species,
-        region = region,
-        covariate_type = covariate_type,
-        update_model = TRUE,
-        update_index = TRUE,
-        silent = TRUE
-      ),
-      output_file = paste0(
-        spp, "-",
-        gsub(" ", "-", gsub("\\/", "-", covariate_type)), "-",
-        gsub(" ", "-", gsub("\\/", "-", region_name)), ".html"
-      )
-    )
-  })
-}
-
-# purrr::pwalk(to_fit, fit_index)
-
-is_rstudio <- !is.na(Sys.getenv("RSTUDIO", unset = NA))
-is_unix <- .Platform$OS.type == "unix"
-if (is_unix && !is_rstudio) {
-  future::plan(future::multicore, workers = 4L)
+if (PARALLEL) {
+  furrr::future_pwalk(to_fit, fit_index)
 } else {
-  future::plan(future::multisession, workers = 4L)
+  purrr::pwalk(to_fit, fit_index)
 }
-options(future.rng.onMisuse = "ignore")
 
-furrr::future_pwalk(to_fit, fit_index)
-
-future::plan(future::sequential)
+# avoid crashing RStudio:
+if (PARALLEL) future::plan(future::sequential)

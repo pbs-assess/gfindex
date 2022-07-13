@@ -24,7 +24,7 @@ species
 # c-o sole
 # cabezon
 # california grenadier
-# canary rockfish
+canary rockfish
 # chilipepper
 # china rockfish
 # copper rockfish
@@ -61,7 +61,7 @@ species
 # pearly prickleback
 # petrale sole
 # pygmy rockfish
-quillback rockfish
+# quillback rockfish
 # ragfish
 # redbanded rockfish
 # redstripe rockfish
