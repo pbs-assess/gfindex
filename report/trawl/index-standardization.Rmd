@@ -615,7 +615,7 @@ plot_map(p, "est*1000000") +
 
 ## Standardized index
 
-```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index. Shown are means and 95% CIs."}
+```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized relative index. Shown are means and 95% CIs."}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   i <- readRDS(f)
@@ -650,7 +650,7 @@ i %>%
   select(year, est, lwr, upr, cv) %>% 
   mutate(est = est / 1000, lwr = lwr / 1000, upr = upr / 1000) %>%
   rename(Year = year, Estimate = est, `Lower 95% CI` = lwr, `Upper 95% CI` = upr, CV = cv) %>% 
-  knitr::kable(digits = c(0, 0, 0, 0, 2), caption = "Standardized index of abundance. Estimates are in units of tonnes.") %>% 
+  knitr::kable(digits = c(0, 0, 0, 0, 2), caption = "Standardized relative index. Estimates are in units of tonnes.") %>% 
   kableExtra::kable_styling(
     bootstrap_options = "striped", full_width = FALSE, position = "center"
   )
