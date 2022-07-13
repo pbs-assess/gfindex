@@ -2,7 +2,9 @@
 title: "`r params$region` `r stringr::str_to_title(params$species)` `r stringr::str_to_title('geostatistical index standardization')`"
 author: ""
 date: "`r Sys.Date()`"
-output: bookdown::html_document2
+output:
+  bookdown::html_document2:
+     number_sections: false
 params:
     species: "Canary Rockfish"
     region: "SYN WCVI"
@@ -78,20 +80,52 @@ if (region == "Coast-wide trawl surveys") {
 }
 ```
 
-Settings used in this report:
+# Contents {.tabset}
+
+## Description
 
 ```{r print-params}
-.p <- params
-.p$starr_mode <- NULL
-.p$update_index <- NULL
-.p$update_model <- NULL
-.p$silent <- NULL
-.p$qq_residuals <- NULL
-if (region == "SYN WCHG") .p$cutoff <- .p$cutoff_wchg
-.p$cutoff_wchg <- NULL
-print(.p)
+settings <- params
+settings$starr_mode <- NULL
+settings$update_index <- NULL
+settings$update_model <- NULL
+settings$silent <- NULL
+settings$qq_residuals <- NULL
+if (region == "SYN WCHG") settings$cutoff <- settings$cutoff_wchg
+settings$cutoff_wchg <- NULL
+# print(settings)
 ```
 
+This report shows the output of using a geostatistical model to generate a standardized index of biomass for **`r stringr::str_to_title(params$species)`** from the **`r params$region`** survey.
+The report was run at `lubridate::now()` using sdmTMB version `r packageVersion("sdmTMB")`, TMB version `r packageVersion("TMB")`, and INLA version `r packageVersion("INLA")`.
+
+```{r}
+library(glue)
+if (params$covariate_type == "with depth") {
+  depth_pre <- "Include"
+} else {
+  depth_pre <- "Do not include"
+}
+
+if (params$share_range) {
+  range_pre <- "Share"
+} else {
+  range_pre <- "Do not share"
+}
+```
+
+The following settings were used:
+
+- `r glue('{depth_pre} a depth covariate.')`
+
+- `r glue('{range_pre} the spatial range parameter (distance at which two data points are effectively independent) across spatial and spatiotemporal fields.')`
+
+- Set the 'cutoff' (minimum triangle distance in the mesh) to `r settings$cutoff`.
+
+- `r glue("{if (params$anisotropy) 'Do' else 'Do not'} use spatial anisotropy.")`
+
+- `r if (isFALSE(params$anisotropy)) 'Use a penalized complexity (PC) prior on the Matérn covariance parameters such that P(range > 5km) = 0.95 and P(SD < 3) = 0.95.'`
+  
 <!-- Get species data  -->
 
 ```{r dat}
@@ -137,6 +171,8 @@ coords <- coord_equal(
 )
 utm_labs <- labs(x = "Easting", y = "Northing")
 ```
+
+## Raw data
 
 ```{r raw-data-plot, fig.cap=paste("Plot of raw data. Sets with zero catch are shown as crosses. Area and colour of circles corresponds to set density.", if (params$region == 'SYN WCHG') "SYN WCHG 2014 raw data are plotted but are excluded from index standardization.")}
 french <- FALSE
@@ -184,6 +220,8 @@ data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not
 
 <!-- Make mesh -->
 
+## SPDE mesh
+
 ```{r mesh, fig.width=8.5, fig.height=8.5, out.width="50%", fig.cap="SPDE (stochastic partial differential equation) mesh used during model fitting."}
 cutoff <- params$cutoff
 spatiotemporal <- "iid"
@@ -226,6 +264,8 @@ if (!file.exists(f2)) {
 ```
 
 <!-- Run sdmTMB model -->
+
+## Fitted model
 
 ```{r fit-models, eval=update_model}
 update_index <- TRUE
@@ -325,6 +365,8 @@ if (length(m$family$family) > 1L) {
     select(-std.error)
 }
 ```
+
+## Model visualizations
 
 ```{r plot-aniso, fig.cap="Anisotropy ranges"}
 if (isTRUE(params$anisotropy)) {
@@ -570,7 +612,9 @@ plot_map(p, "est*1000000") +
   ggtitle("Overall biomass density estimates")
 ```
 
-```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index."}
+## Standardized index
+
+```{r plot-index, eval=plot_index, out.width="50%", fig.width = 8, fig.cap="Standardized index. Shown are means and 95% CIs."}
 f <- here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds"))
 if (file.exists(f)) {
   i <- readRDS(f)
@@ -598,3 +642,13 @@ if (file.exists(f)) {
   g
 }
 ```
+
+```{r index-table, results='asis'}
+i %>%
+  mutate(cv = sqrt(exp(se^2) - 1)) %>% 
+  select(year, est, lwr, upr, cv) %>% 
+  mutate(est = est / 1000, lwr = lwr / 1000, upr = upr / 1000) %>%
+  rename(Year = year, Estimate = est, `Lower 95% CI` = lwr, `Upper 95% CI` = upr, CV = cv) %>% 
+  knitr::kable(digits = c(0, 0, 0, 0, 2), caption = "Standardized index of abundance. Estimates are in units of tonnes.")
+```
+
