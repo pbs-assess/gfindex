@@ -51,9 +51,8 @@ list_regions <- c(
   "SYN WCHG"
 )
 
-list_species <- c(
-  "Canary Rockfish"
-)
+list_species <- readr::read_delim(here::here("report/trawl/spp.txt"),
+  comment = "#", delim = "\n", col_types = "c") %>% pull(species)
 
 list_covariate_type <- c("with depth", "no depth")
 
