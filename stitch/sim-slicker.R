@@ -9,6 +9,8 @@
 # - how do I know this is happening in reality (besides the seesaw)?
 # - does including a region/north/south covariate fix it: No! build in to
 #   routine code?
+
+# What is an index of seesawness?
 #
 # Things to show:
 # - spatial random field messing up
@@ -26,29 +28,42 @@
 # - what about ar1 on year effect? add to sdmTMB?
 # - RW on year effect?
 
+# quadratic, linear, or breakpoint covariate effect?
+
 library(sdmTMB)
 library(ggplot2)
 library(dplyr)
 source("stitch/funcs.R")
 # Simulation testing survey stitching with various models -----------------
 
+N_YEAR <- 12 # even number
+SEED <- 2817
+
 predictor_grid <- expand.grid(
   X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
-  year = 1:10
+  year = seq_len(N_YEAR)
 )
 mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
 
-# xx <- seq(0, 1, length.out = 100)
-# plot(xx, xx * 2.2 + 3.8 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+xx <- seq(0, 1, length.out = 100)
+plot(xx, xx * 2 + 5 * xx^2, ylab = "Depth effect", xlab = "Depth value")
 
-# 192022 RW does poorly with no gap?
-# 39220 interesting
-x <- sim(predictor_grid, mesh_sim, seed = 3920, year_mean = 1.0, year_sd = 0.2)
+x <- sim(predictor_grid, mesh_sim, seed = SEED,
+  year_arima.sim = list(ar = 0.6), year_marginal_sd = 0.3,
+  coefs = c(2, 5),
+  north_effect = 0)
 sim_dat <- x$sim_dat
 predictor_dat <- x$predictor_dat
 
 # Visualize what we just did ----------------------------------------------
 
+# Year effects:
+ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, y)) +
+  geom_line()
+ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, exp(y))) +
+  geom_line()
+
+# Spatio-temporal truth
 ggplot(sim_dat, aes(X, Y, fill = eta)) +
   geom_raster() +
   facet_wrap(vars(year)) +
@@ -56,8 +71,8 @@ ggplot(sim_dat, aes(X, Y, fill = eta)) +
 
 # Sample N per year -----------------------------------------------------
 
-d <- observe(sim_dat, sample_n = 400,
-  north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2), gap = 0.25)
+d <- observe(sim_dat, sample_n = 400, seed = SEED,
+  north_yrs = seq(1, N_YEAR - 1, 2), south_yrs = seq(2, N_YEAR, 2), gap = 0.3)
 
 # Visualize it ------------------------------------------------------------
 
@@ -70,7 +85,8 @@ ggplot(d, aes(X, Y, colour = log(observed))) +
 
 actual <- group_by(sim_dat, year) %>%
   summarise(total = sum(mu))
-plot(actual$year, actual$total)
+ggplot(actual, aes(year, total)) +
+  geom_line()
 
 # Fit models --------------------------------------------------------------
 
@@ -86,6 +102,7 @@ i <- 1
 
 fits[[i]] <- sdmTMB(
   observed ~ 1 + depth_cov + I(depth_cov^2), family = tweedie(),
+  # observed ~ 1 + depth_cov, family = tweedie(),
   data = d, time = "year", spatiotemporal = "rw", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
@@ -104,7 +121,8 @@ nms <- c(nms, "RW")
 i <- i + 1
 
 fits[[i]] <- sdmTMB(
-  observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+  # observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+  observed ~ 0 + as.factor(year) + depth_cov, family = tweedie(),
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
@@ -135,7 +153,8 @@ nms <- c(nms, "IID s(year)")
 i <- i + 1
 
 fits[[i]] <- sdmTMB(
-  observed ~ s(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+  # observed ~ s(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+  observed ~ s(year) + depth_cov, family = tweedie(),
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
@@ -163,7 +182,8 @@ i <- i + 1
 nms <- c(nms, "IID RW year")
 
 fits[[i]] <- sdmTMB(
-  observed ~ 0 + depth_cov + I(depth_cov^2), family = tweedie(),
+  # observed ~ 0 + depth_cov + I(depth_cov^2), family = tweedie(),
+  observed ~ 0 + depth_cov, family = tweedie(),
   time_varying = ~ 1,
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
@@ -173,7 +193,8 @@ i <- i + 1
 nms <- c(nms, "IID RW covariate year")
 
 fits[[i]] <- sdmTMB(
-  observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
+  # observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
+  observed ~ 0 + as.factor(year) + depth_cov,
   family = tweedie(),
   data = d, time = "year", spatiotemporal = "off", spatial = "on",
   silent = TRUE, mesh = mesh,
@@ -225,8 +246,8 @@ g <- indexes_df |>
   subtitle = paste0("Dashed = true; dots/lines = estimated\n")) +
   ylab("Abundance estimate") + xlab("Year") +
   labs(colour = "Sampled region") +
-  coord_cartesian(ylim = ylims)
-  # scale_y_log10()
+  coord_cartesian(ylim = ylims) +
+  scale_y_log10()
 print(g)
 
 # Look at one point in space... -------------------------------------------
@@ -252,15 +273,18 @@ p1 |> left_join(select(d, year, sampled_region) %>% distinct()) |>
 
 indexes_df |>
   left_join(actual) |>
+  left_join(select(d, year, sampled_region) %>% distinct()) |>
   group_by(model) |>
+  mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    mre = mean(log(total) - log(est)),
-    rmse = sqrt(mean((log(total) - log(est))^2)),
+    seesaw_index = mean(log_residual[sampled_region == "north"]) - mean(log_residual[sampled_region == "south"]),
+    mre = mean(log_residual),
+    rmse = sqrt(mean(log_residual^2)),
     coverage = mean(total < upr & total > lwr)
   ) |>
-  arrange(rmse)
+  arrange(rmse) |>
+  print()
 
-# fits$`IID covariate fixed`
 
 # observation: even with covariate correctly fixed, seems to want to put
 # variance into year factors and shrink random fields
