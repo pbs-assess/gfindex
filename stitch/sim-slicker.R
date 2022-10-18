@@ -21,53 +21,31 @@
 # - lower or increasing observation error ('phi') (e.g., 2 vs. 7)
 # - try lowering or increasing numbers of samples (e.g., 250 vs. 400)
 # - one year of complete coverage at beginning or end or none
+# - impact of uneven north south vs. even?
+
+# - what about ar1 on year effect? add to sdmTMB?
+# - RW on year effect?
 
 library(sdmTMB)
 library(ggplot2)
 library(dplyr)
+source("stitch/funcs.R")
 # Simulation testing survey stitching with various models -----------------
 
-PHI <- 8
-SAMPLE_N <- 300
-SEED <- 12346
-
-# Simulate data -----------------------------------------------------------
-
-predictor_dat <- expand.grid(
+predictor_grid <- expand.grid(
   X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
   year = 1:10
 )
-mesh_sim <- make_mesh(predictor_dat, xy_cols = c("X", "Y"), cutoff = 0.1)
+mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
 
-# Define north and south regions ------------------------------------------
+# xx <- seq(0, 1, length.out = 100)
+# plot(xx, xx * 2.2 + 3.8 * xx^2, ylab = "Depth effect", xlab = "Depth value")
 
-predictor_dat$region <- NA
-predictor_dat$region[predictor_dat$Y < 0.5] <- "south"
-predictor_dat$region[predictor_dat$Y >= 0.5] <- "north"
-predictor_dat$region <- as.factor(predictor_dat$region)
-
-set.seed(SEED * 889)
-yrs <- rnorm(max(predictor_dat$year), mean = 1.2, sd = 0.15)
-predictor_dat$depth_cov <- predictor_dat$Y
-sim_dat <- sdmTMB_simulate(
-  formula = ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh_sim,
-  family = tweedie(),
-  range = 0.8,
-  sigma_E = 0.4,
-  rho = 0.5,
-  phi = PHI,
-  tweedie_p = 1.6,
-  sigma_O = 1.2,
-  seed = SEED * 1029,
-  B = c(yrs, 2.2, 3.8)
-)
-xx <- seq(0, 1, length.out = 100)
-plot(xx, xx * 2.2 + 3.8 * xx^2, ylab = "Depth effect", xlab = "Depth value")
-sim_dat$region <- predictor_dat$region
-sim_dat$year <- predictor_dat$year
+# 192022 RW does poorly with no gap?
+# 39220 interesting
+x <- sim(predictor_grid, mesh_sim, seed = 3920, year_mean = 1.0, year_sd = 0.2)
+sim_dat <- x$sim_dat
+predictor_dat <- x$predictor_dat
 
 # Visualize what we just did ----------------------------------------------
 
@@ -76,33 +54,10 @@ ggplot(sim_dat, aes(X, Y, fill = eta)) +
   facet_wrap(vars(year)) +
   scale_fill_viridis_c()
 
-# Zoom in on a year -------------------------------------------------------
+# Sample N per year -----------------------------------------------------
 
-filter(sim_dat, year == 1) %>%
-  ggplot(aes(X, Y, fill = eta)) +
-  geom_raster() +
-  facet_wrap(vars(year)) +
-  scale_fill_viridis_c()
-
-# Sample 400 per year -----------------------------------------------------
-
-set.seed(SEED * 9283)
-obs_dat <- sim_dat %>%
-  group_by(year) %>%
-  sample_n(SAMPLE_N)
-
-# Lose half the survey most years -----------------------------------------
-
-d <- obs_dat
-# d <- d[!(d$year %in% seq(3, 9, 2) & d$region == "north"), ]
-d <- d[!(d$year %in% seq(1, 9, 2) & d$region == "north"), ]
-d <- d[!(d$year %in% seq(2, 10, 2) & d$region != "north"), ]
-d$sampled_region <- d$region
-d$sampled_region <- as.character(d$sampled_region)
-# d$sampled_region[d$year == 1] <- "both"
-
-# Remove strip in middle to increase gap?
-d <- d[!(d$Y > 0.4 & d$Y < 0.6),]
+d <- observe(sim_dat, sample_n = 400,
+  north_yrs = seq(1, 9, 2), south_yrs = seq(2, 10, 2), gap = 0.25)
 
 # Visualize it ------------------------------------------------------------
 
@@ -115,98 +70,144 @@ ggplot(d, aes(X, Y, colour = log(observed))) +
 
 actual <- group_by(sim_dat, year) %>%
   summarise(total = sum(mu))
+plot(actual$year, actual$total)
 
 # Fit models --------------------------------------------------------------
 
 mesh <- make_mesh(d, c("X", "Y"), cutoff = 0.1)
-
 priors <- sdmTMBpriors(
   matern_s = pc_matern(range_gt = 0.3, sigma_lt = 0.4),
   matern_st = pc_matern(range_gt = 0.3, sigma_lt = 0.3)
 )
 
-fit_rw <- sdmTMB(
+fits <- list()
+nms <- c()
+i <- 1
+
+fits[[i]] <- sdmTMB(
   observed ~ 1 + depth_cov + I(depth_cov^2), family = tweedie(),
   data = d, time = "year", spatiotemporal = "rw", spatial = "on",
   silent = TRUE, mesh = mesh,
-  # extra_time = 0L,
   priors = priors
 )
+nms <- c(nms, "RW covariate")
+i <- i + 1
 
-fit_rw_no_cov <- sdmTMB(
+fits[[i]] <- sdmTMB(
   observed ~ 1, family = tweedie(),
   data = d, time = "year", spatiotemporal = "rw", spatial = "on",
   silent = TRUE, mesh = mesh,
   # extra_time = 0L,
   priors = priors
 )
+nms <- c(nms, "RW")
+i <- i + 1
 
-fit_rw_no_cov_0 <- sdmTMB(
-  observed ~ 1, family = tweedie(),
-  data = d, time = "year", spatiotemporal = "rw", spatial = "on",
-  silent = TRUE, mesh = mesh,
-  extra_time = 0L,
-  priors = priors
-)
-
-fit_iid <- sdmTMB(
+fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2), family = tweedie(),
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
 )
+nms <- c(nms, "IID covariate")
+i <- i + 1
 
-fit_iid_no_cov <- sdmTMB(
+# fits[[i]] <- sdmTMB(
+#   observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+#   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+#   silent = TRUE, mesh = mesh,
+#   priors = priors,
+#   control = sdmTMBcontrol(
+#     start = list(b_j = c(rep(0, 10), 2.2, 3.8)),
+#     map = list(b_j = factor(c(seq(1, 10), NA, NA)))
+#   )
+# )
+# nms <- c(nms, "IID covariate fixed")
+# i <- i + 1
+
+fits[[i]] <- sdmTMB(
+  observed ~ s(year), family = tweedie(),
+  data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+  silent = TRUE, mesh = mesh,
+  priors = priors
+)
+nms <- c(nms, "IID s(year)")
+i <- i + 1
+
+fits[[i]] <- sdmTMB(
+  observed ~ s(year) + depth_cov + I(depth_cov^2), family = tweedie(),
+  data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+  silent = TRUE, mesh = mesh,
+  priors = priors
+)
+nms <- c(nms, "IID covariate s(year)")
+i <- i + 1
+
+fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year), family = tweedie(),
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
 )
+i <- i + 1
+nms <- c(nms, "IID")
 
-fit_sp <- sdmTMB(
+fits[[i]] <- sdmTMB(
+  observed ~ 0, family = tweedie(),
+  time_varying = ~ 1,
+  data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+  silent = TRUE, mesh = mesh,
+  priors = priors
+)
+i <- i + 1
+nms <- c(nms, "IID RW year")
+
+fits[[i]] <- sdmTMB(
+  observed ~ 0 + depth_cov + I(depth_cov^2), family = tweedie(),
+  time_varying = ~ 1,
+  data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+  silent = TRUE, mesh = mesh,
+  priors = priors
+)
+i <- i + 1
+nms <- c(nms, "IID RW covariate year")
+
+fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2),
   family = tweedie(),
   data = d, time = "year", spatiotemporal = "off", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
 )
+i <- i + 1
+nms <- c(nms, "Spatial only covariate")
 
-fit_sp_no_cov <- sdmTMB(
+fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year),
   family = tweedie(),
   data = d, time = "year", spatiotemporal = "off", spatial = "on",
   silent = TRUE, mesh = mesh,
   priors = priors
 )
+i <- i + 1
+nms <- c(nms, "Spatial only")
 
-fits <- list(fit_rw, fit_rw_no_cov_0, fit_rw_no_cov, fit_iid, fit_iid_no_cov, fit_sp, fit_sp_no_cov)
-names(fits) <- c("RW depth", "RW 0", "RW", "IID depth", "IID", "Spatial depth", "Spatial")
+names(fits) <- nms
 
 # Predict on grid and calculate indexes -----------------------------------
 
 nd <- select(predictor_dat, X, Y, year, region)
 nd$depth_cov <- nd$Y
-
-nd2 <- bind_rows(nd, filter(nd, year == 1) |> mutate(year = 0L)) |>
-  arrange(year)
-
-# preds <- purrr::map(fits, predict, newdata = nd, return_tmb_object = TRUE)
-preds <- purrr::map(fits, function(.x) {
-  if (!isTRUE(.x$extra_time == 0L)) {
-    predict(.x, newdata = nd, return_tmb_object = TRUE)
-  } else {
-    predict(.x, newdata = nd2, return_tmb_object = TRUE)
-  }
-})
-
+preds <- purrr::map(fits, predict, newdata = nd, return_tmb_object = TRUE)
 indexes <- purrr::map(preds, get_index, bias_correct = TRUE)
 
 indexes_df <- dplyr::bind_rows(indexes, .id = "model") |>
-  mutate(with_depth = paste0("depth = ", grepl("depth", model))) |>
-  mutate(type = gsub(" depth", "", model))
+  mutate(with_depth = paste0("covariate = ", grepl("covariate", model))) |>
+  mutate(type = gsub(" covariate", "", model))
 
 # Plot it -----------------------------------------------------------------
 
+ylims <- range(indexes_df$est) * c(0.8, 1.2)
 mult <- 1
 g <- indexes_df |>
   left_join(select(d, year, sampled_region) %>% distinct()) %>%
@@ -219,13 +220,16 @@ g <- indexes_df |>
   geom_line(data = actual, mapping = aes(year, total),
     inherit.aes = FALSE, lty = 2) +
   facet_grid(with_depth~type) +
-  ggtitle("IID vs. RW model; with and without cov",
-  subtitle = paste0("Dashed = true; dots/lines = estimated\n", "phi = ", PHI, ", N = ", SAMPLE_N)) +
+  ggtitle("IID vs. RW vs. spatial model; with and without covariate",
+  # subtitle = paste0("Dashed = true; dots/lines = estimated\n", "phi = ", PHI, ", N = ", SAMPLE_N)) +
+  subtitle = paste0("Dashed = true; dots/lines = estimated\n")) +
   ylab("Abundance estimate") + xlab("Year") +
-  labs(colour = "Sampled region")
+  labs(colour = "Sampled region") +
+  coord_cartesian(ylim = ylims)
+  # scale_y_log10()
 print(g)
 
-# look at one point in space...
+# Look at one point in space... -------------------------------------------
 
 get_eg_cell <- function(obj, x, y) {
   obj$data[
@@ -235,14 +239,35 @@ get_eg_cell <- function(obj, x, y) {
 
 p1 <- purrr::map_dfr(preds, get_eg_cell, x = 0.50505051, y = 0.81818182,
   .id = "model") |>
-  mutate(with_depth = grepl("depth", model)) |>
-  mutate(type = gsub(" depth", "", model))
+  mutate(with_depth = grepl("covariate", model)) |>
+  mutate(type = gsub(" covariate", "", model))
 
-ggplot(p1, aes(year, est)) + geom_line() +
-  facet_grid(with_depth~type)
+p1 |> left_join(select(d, year, sampled_region) %>% distinct()) |>
+  ggplot(aes(year, est)) + geom_line() +
+  facet_grid(with_depth~type) +
+  geom_point(aes(colour = sampled_region)) +
+  ggsidekick::theme_sleek()
+
+# What about coverage? ----------------------------------------------------
+
+indexes_df |>
+  left_join(actual) |>
+  group_by(model) |>
+  summarise(
+    mre = mean(log(total) - log(est)),
+    rmse = sqrt(mean((log(total) - log(est))^2)),
+    coverage = mean(total < upr & total > lwr)
+  ) |>
+  arrange(rmse)
+
+# fits$`IID covariate fixed`
+
+# observation: even with covariate correctly fixed, seems to want to put
+# variance into year factors and shrink random fields
+# nothing stopping it from see-sawing fixed effects and shrinking random field
+# variance
 
 # Question: can an extra latent year at the beginning fix the 'burnin' problem!?
-
 
 
 # Observations ------------------------------------------------------------
