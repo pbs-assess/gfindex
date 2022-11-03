@@ -19,16 +19,6 @@
 # - RW deviations adapting to fit?
 # - fix depth covariates correctly - works?
 
-# study design:
-# - [ ] no gap, small gap, large gap
-# - [ ] no covariate effect; strong covariate effect
-# - [ ] lower or increasing observation error ('phi') (e.g., 2 vs. 7)
-# - [ ] try lowering or increasing numbers of samples (e.g., 250 vs. 400)
-# - [ ] one year of complete coverage at beginning or end or none
-# - [ ] impact of uneven north south vs. even?
-
-# - what about ar1 on year effect? add to sdmTMB?
-# - RW on year effect?
 
 # quadratic, linear, or breakpoint covariate effect?
 
@@ -39,36 +29,46 @@ source("stitch/funcs.R")
 dir.create("stitch/figs", showWarnings = FALSE)
 # Simulation testing survey stitching with various models -----------------
 
-# N_YEAR <- 12 # even number
-# SEED <- 28817
-# SEED <- 288171
+# n_year <- 12 # even number
+# .seed <- 28817
+# .seed <- 288171
 
 # predictor_grid <- expand.grid(
 #   X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
-#   year = seq_len(N_YEAR)
+#   year = seq_len(n_year)
 # )
 # mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
 
 # xx <- seq(0, 1, length.out = 100)
 # plot(xx, xx * 2 + 5 * xx^2, ylab = "Depth effect", xlab = "Depth value")
 
-sim_fit_and_index <- function(N_YEAR, SEED, obs_sampled_size = 400L, gap_size = 0.3, year_marginal_sd = 0.3, year_arima.sim = list(ar = 0.6), sim_coefs = c(2, 5)) {
-
+sim_fit_and_index <- function(n_year,
+                              .seed,
+                              gap_size = 0.3,
+                              obs_sampled_size = 400L,
+                              year_marginal_sd = 0.3,
+  obs_yrs = list(north_yrs = seq(1, n_year - 1, 2),
+    south_yrs = seq(2, n_year, 2)),
+  phi = 8,
+                              region_cutoff = 0.5,
+                              year_arima.sim = list(ar = 0.6),
+                              sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0
-  if (!is_even(N_YEAR)) cli::cli_abort("Number of years must be even.")
+  if (!is_even(n_year)) cli::cli_abort("Number of years must be even.")
 
-  cli::cli_alert_info(glue::glue("Running simulation for seed ", SEED))
+  cli::cli_alert_info(glue::glue("Running simulation for seed ", .seed))
 
   cli::cli_alert_success("Creating mesh...")
   predictor_grid <- expand.grid(
     X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
-    year = seq_len(N_YEAR)
+    year = seq_len(n_year)
   )
   mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
 
   cli::cli_alert_success("Simulating...")
   x <- sim(predictor_grid, mesh_sim,
-    seed = SEED,
+    seed = .seed, phi = phi,
+    region_cutoff = region_cutoff,
     year_arima.sim = year_arima.sim, year_marginal_sd = year_marginal_sd,
     coefs = sim_coefs,
     north_effect = 0
@@ -79,9 +79,9 @@ sim_fit_and_index <- function(N_YEAR, SEED, obs_sampled_size = 400L, gap_size = 
   # Visualize what we just did ----------------------------------------------
 
   # # Year effects:
-  # ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, y)) +
+  # ggplot(data.frame(x = seq_len(n_year), y = x$year_effects), aes(x, y)) +
   #   geom_line()
-  # ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, exp(y))) +
+  # ggplot(data.frame(x = seq_len(n_year), y = x$year_effects), aes(x, exp(y))) +
   #   geom_line()
   #
   # blank_theme_elements <- theme(panel.grid.major = element_line(colour = "grey90"),
@@ -103,9 +103,13 @@ sim_fit_and_index <- function(N_YEAR, SEED, obs_sampled_size = 400L, gap_size = 
   # Sample N per year -----------------------------------------------------
 
   cli::cli_alert_success("Observing...")
-  d <- observe(sim_dat,
-    sample_n = obs_sampled_size, seed = SEED,
-    north_yrs = seq(1, N_YEAR - 1, 2), south_yrs = seq(2, N_YEAR, 2), gap = gap_size
+  d <- observe(
+    sim_dat,
+    sample_n = obs_sampled_size,
+    region_cutoff = region_cutoff,
+    seed = .seed,
+    north_yrs = obs_yrs$north_yrs,
+    south_yrs = obs_yrs$south_yrs, gap = gap_size
   )
 
   # Visualize it ------------------------------------------------------------
@@ -232,13 +236,92 @@ sim_fit_and_index <- function(N_YEAR, SEED, obs_sampled_size = 400L, gap_size = 
     mutate(type = gsub(" covariate", "", model))
 
   indexes_df <- left_join(indexes_df, actual, by = "year") |>
-    mutate(seed = SEED)
+    mutate(seed = .seed)
   indexes_df
 }
 
 # Plot it -----------------------------------------------------------------
 
-out <- purrr::map_dfr(seq_len(10L), ~ sim_fit_and_index(N_YEAR = 12L, SEED = .x))
+# out <- purrr::map_dfr(seq_len(1L), ~ sim_fit_and_index(n_year = 12L, .seed = .x))
+# out <- purrr::map_dfr(seq_len(10L), ~ sim_fit_and_index(n_year = 12L, .seed = .x))
+#
+
+# study design:
+# - [ ] no gap, small gap, large gap `gap_size`
+#       gap_size = 0.00
+#       gap_size = 0.25
+#       gap_size = 0.50
+
+# - [ ] no covariate effect; strong covariate effect
+#       sim_coefs = c(2, 5)
+#       sim_coefs = c(0, 0)
+
+# - [ ] lower or increasing observation error ('phi')
+#       phi = 2
+#       phi = 7
+
+# - [ ] try lowering or increasing numbers of samples
+#       obs_sampled_size = 200L
+#       obs_sampled_size = 400L
+
+# - [ ] one year of complete coverage at beginning or end or none TODO
+#       obs_yrs = list(north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2))
+#       obs_yrs = list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2))
+
+# - [ ] impact of uneven north south vs. even?
+#       region_cutoff = 0.50
+#       region_cutoff = 0.25
+
+n_year <- 12L
+
+base <- list(
+  n_year = n_year,
+  label = "",
+  gap_size = 0.25,
+  sim_coefs = c(2, 5),
+  phi = 8,
+  obs_sampled_size = 400L,
+  obs_yrs = list(north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2)),
+    region_cutoff = 0.50)
+)
+
+sc <- purrr::map(seq_len(8), ~ base)
+sc[[1]]$label <- "Base"
+sc[[2]]$label <- "No gap"
+sc[[2]]$gap_size <- 0
+
+sc[[3]]$label <- "Large gap"
+sc[[3]]$gap_size <- 0.5
+
+sc[[4]]$label <- "No covariate"
+sc[[4]]$sim_coefs <- c(0, 0)
+
+sc[[5]]$label <- "Low observation error"
+sc[[5]]$phi <- 3
+
+sc[[6]]$label <- "Low sample size"
+sc[[6]]$obs_sampled_size <- 200L
+
+sc[[7]]$label <- "Year of overlap"
+sc[[7]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+
+sc[[8]]$label <- "Unequal regions"
+sc[[8]]$region_cutoff <- 0.25
+
+names(sc) <- purrr::map_chr(sc, "label")
+sc <- purrr::map(sc, ~ {.x$label <- NULL;.x})
+
+for (i in seq_along(sc)) sc[[i]]$.seed <- 1
+
+out <- purrr::pmap_dfr(sc, sim_fit_and_index, .id = "label")
+
+out <- list()
+for (i in seq_along(sc)) {
+  out[[i]] <- do.call(sim_fit_and_index, sc[[i]])
+}
+
+# ---------------------------------------------
+# iterate above ....
 
 actual <- select(out, year, total, seed, sampled_region) |> distinct()
 
@@ -303,7 +386,7 @@ out |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
     seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
-        mean(log_residual[sampled_region == "south"])),
+      mean(log_residual[sampled_region == "south"])),
     mre = mean(log_residual),
     rmse = sqrt(mean(log_residual^2)),
     mean_se = mean(se),
