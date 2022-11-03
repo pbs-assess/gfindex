@@ -1,3 +1,5 @@
+# question: same thing happen with missing chunks from one index!?
+
 # To look at:
 # - gap matters! how much; related to range I assume
 # - **why does RW 'fix' things!?**
@@ -34,10 +36,12 @@ library(sdmTMB)
 library(ggplot2)
 library(dplyr)
 source("stitch/funcs.R")
+dir.create("stitch/figs")
 # Simulation testing survey stitching with various models -----------------
 
 N_YEAR <- 12 # even number
-SEED <- 2817
+SEED <- 28817
+SEED <- 288171
 
 predictor_grid <- expand.grid(
   X = seq(0, 1, length.out = 100), Y = seq(0, 1, length.out = 100),
@@ -63,11 +67,21 @@ ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, y)) +
 ggplot(data.frame(x = seq_len(N_YEAR), y = x$year_effects), aes(x, exp(y))) +
   geom_line()
 
+blank_theme_elements <- theme(panel.grid.major = element_line(colour = "grey90"),
+  # panel.spacing.x = unit(20, "pt"),
+  axis.text = element_blank(), axis.ticks = element_blank(),
+  axis.title = element_blank(), legend.position = "right")
+
 # Spatio-temporal truth
 ggplot(sim_dat, aes(X, Y, fill = eta)) +
   geom_raster() +
   facet_wrap(vars(year)) +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c() +
+  ggsidekick::theme_sleek() +
+  coord_equal(expand = FALSE) +
+  blank_theme_elements +
+  labs(fill = "True\nsimulated\nlog abundance")
+# ggsave("stitch/figs/spatio-temporal-truth.pdf", width = 8, height = 5)
 
 # Sample N per year -----------------------------------------------------
 
@@ -79,7 +93,13 @@ d <- observe(sim_dat, sample_n = 400, seed = SEED,
 ggplot(d, aes(X, Y, colour = log(observed))) +
   geom_point() +
   facet_wrap(vars(year)) +
-  scale_colour_viridis_c()
+  scale_colour_viridis_c() +
+  ggsidekick::theme_sleek() +
+  blank_theme_elements +
+  coord_equal(expand = FALSE) +
+  theme(panel.grid.major = element_line(colour = "grey90"))
+# panel.spacing.x = unit(20, "pt")
+# ggsave("stitch/figs/spatio-temporal-observed.pdf", width = 8, height = 5)
 
 # Calculate known true biomass/abundance ----------------------------------
 
@@ -165,7 +185,7 @@ i <- i + 1
 fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year), family = tweedie(),
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-  silent = TRUE, mesh = mesh,
+  mesh = mesh,
   priors = priors
 )
 i <- i + 1
@@ -175,18 +195,28 @@ fits[[i]] <- sdmTMB(
   observed ~ 0, family = tweedie(),
   time_varying = ~ 1,
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-  silent = TRUE, mesh = mesh,
+  mesh = mesh,
   priors = priors
 )
 i <- i + 1
 nms <- c(nms, "IID RW year")
+
+# fits[[i]] <- sdmTMB(
+#   observed ~ 0, family = tweedie(),
+#   time_varying = ~ 1, time_varying_type = "ar1",
+#   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+#   mesh = mesh,
+#   priors = priors
+# )
+# i <- i + 1
+# nms <- c(nms, "IID AR1 year")
 
 fits[[i]] <- sdmTMB(
   # observed ~ 0 + depth_cov + I(depth_cov^2), family = tweedie(),
   observed ~ 0 + depth_cov, family = tweedie(),
   time_varying = ~ 1,
   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-  silent = TRUE, mesh = mesh,
+  mesh = mesh,
   priors = priors
 )
 i <- i + 1
@@ -197,7 +227,7 @@ fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year) + depth_cov,
   family = tweedie(),
   data = d, time = "year", spatiotemporal = "off", spatial = "on",
-  silent = TRUE, mesh = mesh,
+  mesh = mesh,
   priors = priors
 )
 i <- i + 1
@@ -207,7 +237,7 @@ fits[[i]] <- sdmTMB(
   observed ~ 0 + as.factor(year),
   family = tweedie(),
   data = d, time = "year", spatiotemporal = "off", spatial = "on",
-  silent = TRUE, mesh = mesh,
+  mesh = mesh,
   priors = priors
 )
 i <- i + 1
@@ -241,14 +271,16 @@ g <- indexes_df |>
   geom_line(data = actual, mapping = aes(year, total),
     inherit.aes = FALSE, lty = 2) +
   facet_grid(with_depth~type) +
-  ggtitle("IID vs. RW vs. spatial model; with and without covariate",
+  # ggtitle("IID vs. RW vs. spatial model; with and without covariate",
   # subtitle = paste0("Dashed = true; dots/lines = estimated\n", "phi = ", PHI, ", N = ", SAMPLE_N)) +
-  subtitle = paste0("Dashed = true; dots/lines = estimated\n")) +
+  # subtitle = paste0("Dashed = true; dots/lines = estimated\n")) +
   ylab("Abundance estimate") + xlab("Year") +
   labs(colour = "Sampled region") +
   coord_cartesian(ylim = ylims) +
-  scale_y_log10()
+  scale_y_log10() +
+  scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 print(g)
+# ggsave("stitch/figs/saw-tooth-example.pdf", width = 8, height = 5)
 
 # Look at one point in space... -------------------------------------------
 
@@ -269,7 +301,7 @@ p1 |> left_join(select(d, year, sampled_region) %>% distinct()) |>
   geom_point(aes(colour = sampled_region)) +
   ggsidekick::theme_sleek()
 
-# What about coverage? ----------------------------------------------------
+# What about MRE, RMSE, see-saw, coverage etc. ? --------------------------
 
 indexes_df |>
   left_join(actual) |>
@@ -277,14 +309,23 @@ indexes_df |>
   group_by(model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    seesaw_index = mean(log_residual[sampled_region == "north"]) - mean(log_residual[sampled_region == "south"]),
+    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) - mean(log_residual[sampled_region == "south"])),
     mre = mean(log_residual),
     rmse = sqrt(mean(log_residual^2)),
+    mean_se = mean(se),
     coverage = mean(total < upr & total > lwr)
   ) |>
-  arrange(rmse) |>
-  print()
-
+  arrange(seesaw_index, rmse) |>
+  mutate(model = forcats::fct_reorder(model, rev(seesaw_index))) |>
+  tidyr::pivot_longer(cols = -model, names_to = "metric") |>
+  mutate(metric = factor(metric,
+    levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage"))) |>
+  ggplot(aes(value, model)) +
+  geom_point(pch = 21, size = 1.6) +
+  facet_wrap(~metric, scales = "free_x", nrow = 1L) +
+  ggsidekick::theme_sleek() +
+  theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
+  xlab("Metric value")
 
 # observation: even with covariate correctly fixed, seems to want to put
 # variance into year factors and shrink random fields
