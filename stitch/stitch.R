@@ -8,6 +8,41 @@ source("stitch/utils.R")
 dat <- prep_data()
 list_species <- read_species_list("stitch/spp.txt")
 
+arr <- purrr::map(list_species, ~
+    fit_index(
+      dat,
+      species = .x,
+      family = tweedie(),
+      spatiotemporal = "iid",
+      skip_sanity = TRUE,
+      formula = catch_weight ~ 0 + as.factor(year),
+    )
+) %>% setNames(list_species)
+
+index <- purrr::map_dfr(arr, "index", .id = "species")
+
+s <- dat %>% select(year, survey_abbrev) %>% distinct()
+qcs <- filter(s, survey_abbrev %in% "SYN QCS")
+
+qcs <- qcs <- left_join(qcs, index)
+
+g <- ggplot(index, aes(year, est / 1000)) +
+  ggsidekick::theme_sleek()
+g <- g +
+  geom_ribbon(aes(ymin = lwr / 1000, ymax = upr / 1000),
+    alpha = 0.9, fill = "grey90"
+  ) +
+  geom_line(alpha = 0.9, lty = 1, lwd = 0.5)
+g + geom_point(data = qcs, colour = "red")
+
+arr$`pacific cod`$fit
+
+ggplot(dat, aes(X, Y)) + geom_point(pch = ".") +
+ facet_wrap(~year)
+
+group_by(dat, survey_abbrev) %>%
+  summarise(m = mean(catch_weight))
+
 out <- purrr::map(list_species, ~
     fit_index(
       dat,

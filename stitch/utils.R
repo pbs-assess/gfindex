@@ -26,6 +26,7 @@ fit_index <- function(dat,
                       anisotropy = FALSE,
                       spatiotemporal = "rw",
                       silent = FALSE,
+                      skip_sanity = FALSE,
                       priors = sdmTMBpriors(
                         matern_s = pc_matern(range_gt = 10, sigma_lt = 4),
                         matern_st = pc_matern(range_gt = 10, sigma_lt = 3)
@@ -90,7 +91,7 @@ fit_index <- function(dat,
     )
   )
   s <- sanity(fit)
-  if (s$all_ok && class(fit) != "try-error") {
+  if ((s$all_ok || skip_sanity) && class(fit) != "try-error") {
     if (bias_correct) TMB::openmp(n = 1L, DLL = "sdmTMB")
     ind <- get_index(fit, bias_correct = bias_correct, area = nd$cell_area / 100000)
   } else {
