@@ -47,10 +47,14 @@ sim_fit_and_index <- function(n_year,
                               gap_size = 0.3,
                               obs_sampled_size = 400L,
                               year_marginal_sd = 0.3,
-  obs_yrs = list(north_yrs = seq(1, n_year - 1, 2),
-    south_yrs = seq(2, n_year, 2)),
-  phi = 8,
+                              obs_yrs = list(
+                                north_yrs = seq(1, n_year - 1, 2),
+                                south_yrs = seq(2, n_year, 2)
+                              ),
+                              phi = 8,
                               region_cutoff = 0.5,
+                              range = 0.8,
+                              sigma_O = 1.6,
                               year_arima.sim = list(ar = 0.6),
                               sim_coefs = c(2, 5)) {
   is_even <- function(x) x %% 2 == 0
@@ -67,11 +71,11 @@ sim_fit_and_index <- function(n_year,
 
   cli::cli_alert_success("Simulating...")
   x <- sim(predictor_grid, mesh_sim,
-    seed = .seed, phi = phi,
+    seed = .seed, phi = phi, range = range,
     region_cutoff = region_cutoff,
     year_arima.sim = year_arima.sim, year_marginal_sd = year_marginal_sd,
     coefs = sim_coefs,
-    north_effect = 0
+    north_effect = 0, sigma_O = sigma_O
   )
   sim_dat <- x$sim_dat
   predictor_dat <- x$predictor_dat
@@ -276,82 +280,136 @@ n_year <- 12L
 
 base <- list(
   n_year = n_year,
-  label = "",
+  label = "empty",
   gap_size = 0.25,
   sim_coefs = c(2, 5),
   phi = 8,
   obs_sampled_size = 400L,
-  obs_yrs = list(north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2)),
-    region_cutoff = 0.50)
+  obs_yrs = list(
+    north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2)),
+    region_cutoff = 0.50,
+    range = 0.8,
+    sigma_O = 1.6,
+    year_marginal_sd = 0.2
+  )
 )
 
-sc <- purrr::map(seq_len(8), ~ base)
-sc[[1]]$label <- "Base"
-sc[[2]]$label <- "No gap"
-sc[[2]]$gap_size <- 0
+sc <- purrr::map(seq_len(14), ~base)
 
-sc[[3]]$label <- "Large gap"
-sc[[3]]$gap_size <- 0.5
+i <- 1
 
-sc[[4]]$label <- "No covariate"
-sc[[4]]$sim_coefs <- c(0, 0)
+sc[[i]]$label <- "Base"
+i <- i + 1
 
-sc[[5]]$label <- "Low observation error"
-sc[[5]]$phi <- 3
+sc[[i]]$label <- "No gap"
+sc[[i]]$gap_size <- 0
+i <- i + 1
 
-sc[[6]]$label <- "Low sample size"
-sc[[6]]$obs_sampled_size <- 200L
+sc[[i]]$label <- "Large gap"
+sc[[i]]$gap_size <- 0.5
+i <- i + 1
 
-sc[[7]]$label <- "Year of overlap"
-sc[[7]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+sc[[i]]$label <- "No covariate"
+sc[[i]]$sim_coefs <- c(0, 0)
+i <- i + 1
 
-sc[[8]]$label <- "Unequal regions"
-sc[[8]]$region_cutoff <- 0.25
+sc[[i]]$label <- "Low observation error"
+sc[[i]]$phi <- 3
+i <- i + 1
+
+sc[[i]]$label <- "High observation error"
+sc[[i]]$phi <- 14
+i <- i + 1
+
+sc[[i]]$label <- "Low sample size"
+sc[[i]]$obs_sampled_size <- 200L
+i <- i + 1
+
+sc[[i]]$label <- "High sample size"
+sc[[i]]$obs_sampled_size <- 800L
+i <- i + 1
+
+sc[[i]]$label <- "Year of overlap"
+sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+i <- i + 1
+
+sc[[i]]$label <- "Unequal regions"
+sc[[i]]$region_cutoff <- 0.25
+i <- i + 1
+
+sc[[i]]$label <- "Low range"
+sc[[i]]$range <- 0.2
+i <- i + 1
+
+sc[[i]]$label <- "Low sigma O"
+sc[[i]]$sigma_O <- 0.2
+i <- i + 1
+
+sc[[i]]$label <- "High year SD"
+sc[[i]]$year_marginal_sd <- 0.5
+i <- i + 1
+
+sc[[i]]$label <- "Low year SD"
+sc[[i]]$year_marginal_sd <- 0.05
+i <- i + 1
+
+if (any(grepl("empty", purrr::map_chr(sc, "label")))) {
+  stop("Too many slots")
+}
 
 names(sc) <- purrr::map_chr(sc, "label")
-sc <- purrr::map(sc, ~ {.x$label <- NULL;.x})
+sc <- purrr::map(sc, ~ {
+  .x$label <- NULL
+  .x
+})
 
-for (i in seq_along(sc)) sc[[i]]$.seed <- 1
+# out <- purrr::pmap_dfr(sc, sim_fit_and_index, .id = "label")
 
-out <- purrr::pmap_dfr(sc, sim_fit_and_index, .id = "label")
-
-out <- list()
-for (i in seq_along(sc)) {
-  out[[i]] <- do.call(sim_fit_and_index, sc[[i]])
-}
+seeds <- seq_len(20L)
+out_df <- purrr:::map_dfr(seeds, function(seed_i) {
+  for (i in seq_along(sc)) {
+    sc[[i]]$.seed <- seed_i
+    x[[i]] <- do.call(sim_fit_and_index, sc[[i]])
+  }
+  names(x) <- names(sc)
+  bind_rows(x, .id = "label")
+})
 
 # ---------------------------------------------
 # iterate above ....
 
-actual <- select(out, year, total, seed, sampled_region) |> distinct()
+actual <- select(out_df, label, year, total, seed, sampled_region) |>
+  distinct()
 
-ylims <- range(out$est) * c(0.8, 1.2)
-mult <- 1
-g <- out |>
+# out_df$label <- forcats::fct_inorder(out_df$label)
+
+cols <- RColorBrewer::brewer.pal(3L, "Set2")
+names(cols) <- c("north", "south", "both")
+actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label))
+
+g <- out_df |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
-  ggplot(aes(year, est / mult,
-    ymin = lwr / mult, ymax = upr / mult
-  )) +
+  mutate(label = gsub("obs", "\\\nobs", label)) |>
+  ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
   ggsidekick::theme_sleek() +
   geom_pointrange(aes(colour = sampled_region)) +
-  geom_line() +
-  geom_ribbon(alpha = 0.2, colour = NA) +
+  # geom_line(colour = "grey50") +
+  geom_ribbon(alpha = 0.20, colour = NA) +
   geom_line(
-    data = actual, mapping = aes(year, total),
+    data = actual2, mapping = aes(year, total),
     inherit.aes = FALSE, lty = 2
   ) +
-  facet_grid(seed ~ paste(type, with_depth), scales = "free_y") +
-  # ggtitle("IID vs. RW vs. spatial model; with and without covariate",
-  # subtitle = paste0("Dashed = true; dots/lines = estimated\n", "phi = ", PHI, ", N = ", SAMPLE_N)) +
-  # subtitle = paste0("Dashed = true; dots/lines = estimated\n")) +
+  facet_grid(forcats::fct_inorder(label) ~ paste(type, with_depth),
+    scales = "free_y"
+  ) +
   ylab("Abundance estimate") +
   xlab("Year") +
   labs(colour = "Sampled region") +
-  # coord_cartesian(ylim = ylims) +
+  scale_colour_manual(values = cols[c(2, 1, 3)]) +
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 print(g)
-ggsave("stitch/figs/saw-tooth-10.pdf", width = 14, height = 10)
+ggsave("stitch/figs/saw-tooth-scenarios.pdf", width = 14, height = 17)
 
 # Look at one point in space... -------------------------------------------
 
