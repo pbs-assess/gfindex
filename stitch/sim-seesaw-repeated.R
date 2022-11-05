@@ -346,7 +346,7 @@ sc[[i]]$sigma_O <- 0.2
 i <- i + 1
 
 sc[[i]]$label <- "High year SD"
-sc[[i]]$year_marginal_sd <- 0.5
+sc[[i]]$year_marginal_sd <- 0.8
 i <- i + 1
 
 sc[[i]]$label <- "Low year SD"
@@ -367,6 +367,7 @@ sc <- purrr::map(sc, ~ {
 
 seeds <- seq_len(20L)
 out_df <- purrr:::map_dfr(seeds, function(seed_i) {
+  x <- list()
   for (i in seq_along(sc)) {
     sc[[i]]$.seed <- seed_i
     x[[i]] <- do.call(sim_fit_and_index, sc[[i]])
@@ -374,20 +375,25 @@ out_df <- purrr:::map_dfr(seeds, function(seed_i) {
   names(x) <- names(sc)
   bind_rows(x, .id = "label")
 })
+saveRDS(out_df, "stitch/sawtooth-sim-nov4.rds")
 
 # ---------------------------------------------
 # iterate above ....
 
-actual <- select(out_df, label, year, total, seed, sampled_region) |>
-  distinct()
 
 # out_df$label <- forcats::fct_inorder(out_df$label)
 
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
+
+seed_to_plot <- 3
+actual <- select(out_df, label, year, total, seed, sampled_region) |>
+  filter(seed == seed_to_plot) |>
+  distinct()
 actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label))
 
 g <- out_df |>
+  filter(seed == seed_to_plot) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
   ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
@@ -408,7 +414,7 @@ g <- out_df |>
   scale_colour_manual(values = cols[c(2, 1, 3)]) +
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
-print(g)
+# print(g)
 ggsave("stitch/figs/saw-tooth-scenarios.pdf", width = 14, height = 17)
 
 # Look at one point in space... -------------------------------------------
@@ -437,9 +443,7 @@ ggsave("stitch/figs/saw-tooth-scenarios.pdf", width = 14, height = 17)
 
 # What about MRE, RMSE, see-saw, coverage etc. ? --------------------------
 
-out |>
-  # left_join(actual) |>
-  # left_join(select(d, year, sampled_region) %>% distinct()) |>
+out_df |>
   group_by(model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
@@ -463,13 +467,106 @@ out |>
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
 
+# ---------------------
+# get at distribution
+
+temp <- out_df |>
+  group_by(label, seed, model) |>
+  mutate(log_residual = log(total) - log(est)) |>
+  summarise(
+    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
+        mean(log_residual[sampled_region == "south"])),
+    mre = mean(log_residual),
+    rmse = sqrt(mean(log_residual^2)),
+    mean_se = mean(se),
+    coverage = mean(total < upr & total > lwr)
+  ) |>
+  tidyr::pivot_longer(cols = -c(model, seed, label), names_to = "metric") |>
+  mutate(metric = factor(metric,
+    levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage")
+  )) |>
+  group_by(label, model, metric) |>
+  summarise(lwr = quantile(value, 0.2), upr = quantile(value, 0.8), med = quantile(value, 0.5))
+
+saw_tooth_ind <- temp |> filter(metric == "seesaw_index") |>
+  group_by(model) |>
+  summarise(med_st_index = -median(med))
+
+g <- temp |>
+  left_join(saw_tooth_ind) |>
+  ggplot(aes(med, forcats::fct_reorder(model, med_st_index))) +
+  geom_point(pch = 21) +
+  geom_linerange(aes(xmin = lwr, xmax = upr)) +
+  facet_grid(forcats::fct_inorder(label)~metric, scales = "free_x") +
+  ggsidekick::theme_sleek() +
+  theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
+  xlab("Metric value")
+ggsave("stitch/figs/saw-tooth-metrics-all.pdf", width = 10, height = 15)
+
+# ---------------------------------------------------------------------
+# together in one set of panels?
+
+g <- temp |>
+  left_join(saw_tooth_ind) |>
+  # ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, colour = label)) +
+  ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, group = label)) +
+  geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.8) +
+  # geom_linerange(aes(ymin = lwr, ymax = upr), position = position_dodge(width = 0.5)) +
+  facet_wrap(~metric, scales = "free_x", nrow = 1) +
+  ggsidekick::theme_sleek() +
+  theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y = element_blank()) +
+  ylab("Metric value") +
+  coord_flip()
+g
+ggsave("stitch/figs/saw-tooth-metrics-condensed.pdf", width = 8, height = 3)
+
+
+# ----------------------
+
+temp <- out_df |>
+  group_by(label, model, seed) |>
+  mutate(log_residual = log(total) - log(est)) |>
+  summarise(
+    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
+      mean(log_residual[sampled_region == "south"]))
+  ) |>
+  group_by(label, model) |>
+  summarize(
+    lwr = quantile(seesaw_index, 0.2),
+    upr = quantile(seesaw_index, 0.8),
+    med = median(seesaw_index)
+  ) |>
+  ungroup() |>
+  filter(model == "IID")
+
+temp |>
+  ggplot(aes(med, forcats::fct_reorder(label, med))) +
+  geom_linerange(aes(xmin = lwr, xmax = upr)) +
+  geom_point(pch = 21, size = 1.8) +
+  # facet_wrap(~forcats::fct_inorder(label), scales = "free_x") +
+  ggsidekick::theme_sleek() +
+  theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
+  xlab("Sawtooth metric") +
+  geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70")
+ggsave("stitch/figs/saw-tooth-bad-iid.pdf", width = 3.8, height = 4)
+
+
+
+# Figures
+# Spatial setup example
+# time series example(s) from one seed?
+# summary of when bad (dot-line plot)
+# metrics across a variety of scenarios
+# maybe a figure digging into an example where it goes wrong - show year effects, show spatial omegas and or fixed effect covariate predictions
+
+
+
 # observation: even with covariate correctly fixed, seems to want to put
 # variance into year factors and shrink random fields
 # nothing stopping it from see-sawing fixed effects and shrinking random field
 # variance
 
 # Question: can an extra latent year at the beginning fix the 'burnin' problem!?
-
 
 # Observations ------------------------------------------------------------
 
