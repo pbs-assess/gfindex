@@ -39,8 +39,16 @@ dir.create("stitch/figs", showWarnings = FALSE)
 # )
 # mesh_sim <- make_mesh(predictor_grid, xy_cols = c("X", "Y"), cutoff = 0.1)
 
+# keep it linear?
+
+xx <- seq(0, 1, length.out = 100)
+plot(xx, xx * 4 + 10 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+lines(xx, xx * 2 + 5 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+
 # xx <- seq(0, 1, length.out = 100)
-# plot(xx, xx * 2 + 5 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+# plot(xx, xx * 4 + 10 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+# lines(xx, xx * 2 + 5 * xx^2, ylab = "Depth effect", xlab = "Depth value")
+
 
 sim_fit_and_index <- function(n_year,
                               .seed,
@@ -284,7 +292,7 @@ base <- list(
   gap_size = 0.25,
   sim_coefs = c(2, 5),
   phi = 8,
-  obs_sampled_size = 400L,
+  obs_sampled_size = 400L, # or 200 if blocking first
   obs_yrs = list(
     north_yrs = seq(1, n_year - 1, 2), south_yrs = c(seq(2, n_year, 2)),
     region_cutoff = 0.50,
@@ -322,11 +330,11 @@ sc[[i]]$phi <- 14
 i <- i + 1
 
 sc[[i]]$label <- "Low sample size"
-sc[[i]]$obs_sampled_size <- 200L
+sc[[i]]$obs_sampled_size <- 200L # FIXME
 i <- i + 1
 
 sc[[i]]$label <- "High sample size"
-sc[[i]]$obs_sampled_size <- 800L
+sc[[i]]$obs_sampled_size <- 800L # FIXME
 i <- i + 1
 
 sc[[i]]$label <- "Year of overlap"
@@ -338,7 +346,7 @@ sc[[i]]$region_cutoff <- 0.25
 i <- i + 1
 
 sc[[i]]$label <- "Low range"
-sc[[i]]$range <- 0.2
+sc[[i]]$range <- 0.2  # .25, .5, 1 cod nfld: 180/
 i <- i + 1
 
 sc[[i]]$label <- "Low sigma O"
@@ -352,6 +360,28 @@ i <- i + 1
 sc[[i]]$label <- "Low year SD"
 sc[[i]]$year_marginal_sd <- 0.05
 i <- i + 1
+
+# SD
+# FIXME: highly variable and 0.8
+# student-t... with low AR1 and high SD
+# normal(0, 0.00001)
+# normal(0, 0.2)
+# normal(0, 0.4)
+
+# (with AR1)
+# heavy tailedness
+# regular (normal())
+# heavy normal(0, base) + normal(0, base * 2) 25% of time?
+# very heavy normal(0, base) + normal(0, base * 4) 35% of time?
+
+#
+# AR1 = 0.5
+# AR1 = 0
+# AR1 = 1
+
+# no gradient done
+# base done
+# high gradient north to south
 
 if (any(grepl("empty", purrr::map_chr(sc, "label")))) {
   stop("Too many slots")
@@ -494,6 +524,8 @@ saw_tooth_ind <- temp |> filter(metric == "seesaw_index") |>
 
 g <- temp |>
   left_join(saw_tooth_ind) |>
+  filter(metric != "mre") |>
+  mutate(label = gsub("obs", "\\\nobs", label)) |>
   ggplot(aes(med, forcats::fct_reorder(model, med_st_index))) +
   geom_point(pch = 21) +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
@@ -501,13 +533,15 @@ g <- temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("stitch/figs/saw-tooth-metrics-all.pdf", width = 10, height = 15)
+ggsave("stitch/figs/saw-tooth-metrics-all.pdf", width = 8, height = 13)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
 
 g <- temp |>
   left_join(saw_tooth_ind) |>
+  filter(metric != "mre") |>
+  mutate(label = gsub("obs", "\\\nobs", label)) |>
   # ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, colour = label)) +
   ggplot(aes(x = forcats::fct_reorder(model, med_st_index), y = med, group = label)) +
   geom_point(pch = 21, position = position_dodge(width = 0.2), alpha = 0.8) +
@@ -518,7 +552,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("stitch/figs/saw-tooth-metrics-condensed.pdf", width = 8, height = 3)
+ggsave("stitch/figs/saw-tooth-metrics-condensed.pdf", width = 6.8, height = 3)
 
 
 # ----------------------
@@ -549,8 +583,6 @@ temp |>
   xlab("Sawtooth metric") +
   geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70")
 ggsave("stitch/figs/saw-tooth-bad-iid.pdf", width = 3.8, height = 4)
-
-
 
 # Figures
 # Spatial setup example
