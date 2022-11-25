@@ -92,12 +92,12 @@ i <- i + 1
 
 sc[[i]]$label <- "Low range"
 sc[[i]]$category <- "Range"
-sc[[i]]$range <- 0.25  # .25, .5, 1 cod nfld: 180/
+sc[[i]]$range <- 0.2  # .25, .5, 1 cod nfld: 180/
 i <- i + 1
 
 sc[[i]]$label <- "High range"
 sc[[i]]$category <- "Range"
-sc[[i]]$range <- 1  # .25, .5, 1 cod nfld: 180/
+sc[[i]]$range <- 0.8  # .25, .5, 1 cod nfld: 180/
 i <- i + 1
 
 # Marginal RF SD

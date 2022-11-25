@@ -44,7 +44,7 @@ sc <- purrr::map(sc, ~ {
 # out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = F))
 # tictoc::toc()
 
-seeds <- seq_len(2L)
+seeds <- seq_len(3L)
 out_df <- purrr:::map_dfr(seeds, function(seed_i) {
   x <- list()
   for (i in seq_along(sc)) {
@@ -55,7 +55,7 @@ out_df <- purrr:::map_dfr(seeds, function(seed_i) {
   bind_rows(x, .id = "label")
 })
 out_df2 <- left_join(out_df, lu, by = "label")
-saveRDS(out_df2, "stitch/sawtooth-sim-nov4.rds")
+saveRDS(out_df2, "stitch/sawtooth-sim-nov24.rds")
 
 # ---------------------------------------------
 # iterate above ....
