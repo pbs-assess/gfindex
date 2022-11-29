@@ -1,4 +1,4 @@
-n_year <- 20L
+n_year <- 12L
 
 base <- list(
   n_year = n_year,
@@ -18,7 +18,7 @@ base <- list(
   year_marginal_sd = 0.3
 )
 
-sc <- purrr::map(seq_len(20), ~base)
+sc <- purrr::map(seq_len(21), ~base)
 
 i <- 1
 
@@ -76,8 +76,16 @@ i <- i + 1
 
 # Year of overlap
 
-sc[[i]]$label <- "Year of overlap"
+sc[[i]]$label <- "Year of overlap (same effort)"
 sc[[i]]$category <- "Year overlap"
+sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
+i <- i + 1
+
+# Year of overlap (and double effort overall)
+
+sc[[i]]$label <- "Year of overlap (double effort)"
+sc[[i]]$category <- "Year overlap"
+sc[[i]]$sample_before_split <- TRUE
 sc[[i]]$obs_yrs <- list(north_yrs = c(seq(1, n_year - 1, 2), n_year), south_yrs = c(seq(2, n_year, 2)))
 i <- i + 1
 

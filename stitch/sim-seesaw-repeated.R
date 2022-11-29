@@ -41,21 +41,27 @@ sc <- purrr::map(sc, ~ {
 })
 
 # tictoc::tic()
-# out20 <- do.call(sim_fit_and_index, c(sc[[1]], .seed = 1, make_plots = F))
+# out20 <- do.call(sim_fit_and_index, c(sc[[11]], .seed = 1, make_plots = FALSE))
 # tictoc::toc()
 
-seeds <- seq_len(3L)
-out_df <- purrr:::map_dfr(seeds, function(seed_i) {
+future::plan(future::multisession, workers = 6L)
+tictoc::tic()
+seeds <- seq_len(6L)
+# out_df <- purrr:::map_dfr(seeds, function(seed_i) {
+out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
   x <- list()
-  for (i in seq_along(sc)) {
+  for (i in seq_along(sc[1])) {
     sc[[i]]$.seed <- seed_i
     x[[i]] <- do.call(sim_fit_and_index, sc[[i]])
   }
-  names(x) <- names(sc)
+  names(x) <- names(sc)[1]
   bind_rows(x, .id = "label")
-})
+# })
+}, .options = furrr::furrr_options(seed = TRUE))
+tictoc::toc()
 out_df2 <- left_join(out_df, lu, by = "label")
-saveRDS(out_df2, "stitch/sawtooth-sim-nov24.rds")
+saveRDS(out_df2, "stitch/sawtooth-sim-nov28.rds")
+future::plan(future::sequential)
 
 # ---------------------------------------------
 # iterate above ....

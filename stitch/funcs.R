@@ -135,6 +135,7 @@ sim_fit_and_index <- function(n_year,
                               sigma_E = 0.5,
                               heavy_sd_mult = 1,
                               heavy_sd_frac = 0,
+                              sample_before_split = FALSE,
                               year_arima.sim = list(ar = 0.5),
                               make_plots = FALSE,
                               sim_coefs = c(2, 5)) {
@@ -161,7 +162,9 @@ sim_fit_and_index <- function(n_year,
     north_effect = 0, sigma_O = sigma_O
   )
   sim_dat <- x$sim_dat
+  sim_dat$fyear <- as.factor(sim_dat$year)
   predictor_dat <- x$predictor_dat
+  predictor_dat$fyear <- as.factor(predictor_dat$year)
 
   # Visualize what we just did ----------------------------------------------
 
@@ -200,6 +203,7 @@ sim_fit_and_index <- function(n_year,
     region_cutoff = region_cutoff,
     seed = .seed,
     north_yrs = obs_yrs$north_yrs,
+    sample_before_split = sample_before_split,
     south_yrs = obs_yrs$south_yrs, gap = gap_size
   )
 
@@ -324,19 +328,32 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
   nms <- c(nms, "IID RW year")
 
-  # cli::cli_inform("Fitting st time_varying AR1")
-  # fits[[i]] <- sdmTMB(
-  #   observed ~ 0,
-  #   family = tweedie(),
-  #   time_varying = ~1, time_varying_type = "ar1",
-  #   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-  #   mesh = mesh,
-  #   priors = priors,
-  #   control = ctl
-  # )
-  # fits[[i]] <- check_sanity(fits[[i]])
-  # i <- i + 1
-  # nms <- c(nms, "IID AR1 year")
+  cli::cli_inform("Fitting st (1|year)")
+  fits[[i]] <- sdmTMB(
+    observed ~ 1 + (1 | fyear),
+    family = tweedie(),
+    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+    mesh = mesh,
+    priors = priors,
+    control = ctl
+  )
+  fits[[i]] <- check_sanity(fits[[i]])
+  i <- i + 1
+  nms <- c(nms, "IID RW year")
+
+  cli::cli_inform("Fitting st time_varying AR1")
+  fits[[i]] <- sdmTMB(
+    observed ~ 0,
+    family = tweedie(),
+    time_varying = ~1, time_varying_type = "ar1",
+    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+    mesh = mesh,
+    priors = priors,
+    control = ctl
+  )
+  fits[[i]] <- check_sanity(fits[[i]])
+  i <- i + 1
+  nms <- c(nms, "IID AR1 year")
 
   cli::cli_inform("Fitting spatial only")
   fits[[i]] <- sdmTMB(
@@ -356,8 +373,10 @@ sim_fit_and_index <- function(n_year,
   # Predict on grid and calculate indexes -----------------------------------
 
   cli::cli_alert_success("Calculating indices...")
-  nd <- select(predictor_dat, X, Y, year, region)
+  nd <- select(predictor_dat, X, Y, year, fyear, region)
   nd$depth_cov <- nd$Y
+
+  nd
 
   preds <- purrr::map(fits, function(.x) {
     if (inherits(.x, "sdmTMB")) {
