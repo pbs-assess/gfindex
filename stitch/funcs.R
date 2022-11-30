@@ -339,21 +339,21 @@ sim_fit_and_index <- function(n_year,
   )
   fits[[i]] <- check_sanity(fits[[i]])
   i <- i + 1
-  nms <- c(nms, "IID RW year")
+  nms <- c(nms, "IID (1|year)")
 
-  cli::cli_inform("Fitting st time_varying AR1")
-  fits[[i]] <- sdmTMB(
-    observed ~ 0,
-    family = tweedie(),
-    time_varying = ~1, time_varying_type = "ar1",
-    data = d, time = "year", spatiotemporal = "iid", spatial = "on",
-    mesh = mesh,
-    priors = priors,
-    control = ctl
-  )
-  fits[[i]] <- check_sanity(fits[[i]])
-  i <- i + 1
-  nms <- c(nms, "IID AR1 year")
+  # cli::cli_inform("Fitting st time_varying AR1")
+  # fits[[i]] <- sdmTMB(
+  #   observed ~ 0,
+  #   family = tweedie(),
+  #   time_varying = ~1, time_varying_type = "ar1",
+  #   data = d, time = "year", spatiotemporal = "iid", spatial = "on",
+  #   mesh = mesh,
+  #   priors = priors,
+  #   control = ctl
+  # )
+  # fits[[i]] <- check_sanity(fits[[i]])
+  # i <- i + 1
+  # nms <- c(nms, "IID AR1 year")
 
   cli::cli_inform("Fitting spatial only")
   fits[[i]] <- sdmTMB(

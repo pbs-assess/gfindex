@@ -46,21 +46,21 @@ sc <- purrr::map(sc, ~ {
 
 future::plan(future::multisession, workers = 6L)
 tictoc::tic()
-seeds <- seq_len(6L)
+seeds <- seq_len(30L)
 # out_df <- purrr:::map_dfr(seeds, function(seed_i) {
 out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
   x <- list()
-  for (i in seq_along(sc[1])) {
+  for (i in seq_along(sc)) {
     sc[[i]]$.seed <- seed_i
     x[[i]] <- do.call(sim_fit_and_index, sc[[i]])
   }
-  names(x) <- names(sc)[1]
+  names(x) <- names(sc)
   bind_rows(x, .id = "label")
 # })
 }, .options = furrr::furrr_options(seed = TRUE))
 tictoc::toc()
 out_df2 <- left_join(out_df, lu, by = "label")
-saveRDS(out_df2, "stitch/sawtooth-sim-nov28.rds")
+saveRDS(out_df2, "stitch/sawtooth-sim-nov29.rds")
 future::plan(future::sequential)
 
 # ---------------------------------------------
@@ -71,7 +71,7 @@ future::plan(future::sequential)
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 3
+seed_to_plot <- 6
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -100,7 +100,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("stitch/figs/saw-tooth-scenarios.pdf", width = 14, height = 17)
+ggsave("stitch/figs/saw-tooth-scenarios-nov29-6.pdf", width = 15, height = 20)
 
 # Look at one point in space... -------------------------------------------
 
