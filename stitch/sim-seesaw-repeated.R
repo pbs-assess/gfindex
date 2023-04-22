@@ -47,7 +47,7 @@ sc <- purrr::map(sc, ~ {
 future::plan(future::multisession, workers = 6L)
 tictoc::tic()
 seeds <- seq_len(30L)
-# out_df <- purrr:::map_dfr(seeds, function(seed_i) {
+# out_df <- purrr:::map_dfr(seeds[1], function(seed_i) {
 out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
   x <- list()
   for (i in seq_along(sc)) {
@@ -63,6 +63,8 @@ out_df2 <- left_join(out_df, lu, by = "label")
 saveRDS(out_df2, "stitch/sawtooth-sim-nov29.rds")
 future::plan(future::sequential)
 
+out_df <- readRDS("stitch/sawtooth-sim-nov29.rds")
+
 # ---------------------------------------------
 # iterate above ....
 
@@ -75,12 +77,18 @@ seed_to_plot <- 6
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
-actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label))
+actual2 <- mutate(actual, label = gsub("obs", "\\\nobs", label)) |>
+  mutate(label = gsub("black", "\\\nblack", label)) |>
+  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
+  mutate(label = gsub("\\(", "\\\n\\(", label))
 
 g <- out_df |>
   filter(seed == seed_to_plot) |>
   mutate(with_depth = gsub("covariate =", "cov =", with_depth)) |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
+  mutate(label = gsub("black", "\\\nblack", label)) |>
+  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
+  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
   ggplot(aes(year, est, ymin = lwr, ymax = upr)) +
   ggsidekick::theme_sleek() +
   geom_pointrange(aes(colour = sampled_region)) +
@@ -100,7 +108,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("stitch/figs/saw-tooth-scenarios-nov29-6.pdf", width = 15, height = 20)
+ggsave("stitch/figs/saw-tooth-scenarios-nov29-6.pdf", width = 15, height = 24)
 
 # Look at one point in space... -------------------------------------------
 
@@ -181,6 +189,9 @@ g <- temp |>
   left_join(saw_tooth_ind) |>
   filter(metric != "mre") |>
   mutate(label = gsub("obs", "\\\nobs", label)) |>
+  mutate(label = gsub("black", "\\\nblack", label)) |>
+  mutate(label = gsub("mixture", "\\\nmixture", label)) |>
+  mutate(label = gsub("\\(", "\\\n\\(", label)) |>
   ggplot(aes(med, forcats::fct_reorder(model, med_st_index))) +
   geom_point(pch = 21) +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
@@ -188,7 +199,7 @@ g <- temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("stitch/figs/saw-tooth-metrics-all.pdf", width = 8, height = 13)
+ggsave("stitch/figs/saw-tooth-metrics-all-dec14.pdf", width = 7, height = 25)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
@@ -207,7 +218,7 @@ g <- temp |>
   ylab("Metric value") +
   coord_flip()
 g
-ggsave("stitch/figs/saw-tooth-metrics-condensed.pdf", width = 6.8, height = 3)
+ggsave("stitch/figs/saw-tooth-metrics-condensed-dec14.pdf", width = 6.8, height = 3)
 
 
 # ----------------------
@@ -230,14 +241,14 @@ temp <- out_df |>
 
 temp |>
   ggplot(aes(med, forcats::fct_reorder(label, med))) +
+  geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70") +
   geom_linerange(aes(xmin = lwr, xmax = upr)) +
   geom_point(pch = 21, size = 1.8) +
   # facet_wrap(~forcats::fct_inorder(label), scales = "free_x") +
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey95"), axis.title.y.left = element_blank()) +
-  xlab("Sawtooth metric") +
-  geom_vline(xintercept = temp$med[temp$model == "IID" & temp$label == "Base"], lty = 2, colour = "grey70")
-ggsave("stitch/figs/saw-tooth-bad-iid.pdf", width = 3.8, height = 4)
+  xlab("Seesaw metric")
+ggsave("stitch/figs/saw-tooth-bad-iid-dec14.pdf", width = 4.2, height = 4.5)
 
 # Figures
 # Spatial setup example
