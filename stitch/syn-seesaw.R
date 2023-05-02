@@ -76,6 +76,12 @@ dat <-
   drop_na(depth_m)          # drop rows without depths
 
 #hist(log(dat$area_swept / 1e5))  # check that log offset is close to 0
+#source(here::here('stitch', 'explore-grids.R'))
+survey_region_baseplot + 
+  geom_point(data = dat %>% filter(str_detect(survey_abbrev, "SYN")), aes(colour = survey_abbrev), shape = 21, alpha = 0.5) + 
+  facet_wrap(~ year) + 
+  guides(colour = guide_legend(override.aes = list(shape = 1, alpha = 1)))
+
 # Start with arrowtooth from synoptic trawl for now
 arrow <- 
   filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
