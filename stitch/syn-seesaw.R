@@ -21,6 +21,7 @@
 #   it might help me if I could make a table describing what each is doing
 # - Why is offset area divided by 100 000 instead of 1 000 000? m2 to km2 should 
 #   be 1e-6?
+#   A: Use 1e5 because this gets the log(offset) closer to zero
 # - Should priors be used? Should they be standardised like they were in the 
 # - sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L); default? nlminb_loops?
 # - index_args; an argument in sdmTMB; these should be a default in fitting the 
@@ -46,7 +47,6 @@ source(here::here('stitch', 'utils.R'))
 mytheme <- function() ggsidekick::theme_sleek()  # sometimes I add more layers to themes
 theme_set(mytheme())
 
-
 # Data preparations
 # ------------------------------------------------------------------------------
 # Clean survey data ------------------------------------------------------------
@@ -57,24 +57,17 @@ dat <-
          area_swept1 = doorspread_m * (speed_mpm * duration_min), 
          area_swept2 = tow_length_m * doorspread_m, 
          area_swept = ifelse(!is.na(area_swept2), area_swept2, area_swept1)) %>% 
-  mutate(area_swept_km2 = area_swept / 1e6) %>%   # This should be used for offset???
-  mutate(log_area_km2 = log(area_swept_km2)) %>%  # Value used for offset
-  sdmTMB::add_utm_columns(c("longitude", "latitude"), utm_crs = 32609)
-
-# Start with arrowtooth from synoptic trawl for now
-arrow <- 
-  filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
-  filter(., species_common_name == 'arrowtooth flounder') %>%
+  mutate(offset = log(area_swept / 1e5)) %>%  # Value used for offset
+  #filter(!(year == 2021 & survey_abbrev == "SYN WCVI")) %>%  # this region not usually surveyed in odd years
+  sdmTMB::add_utm_columns(c("longitude", "latitude"), utm_crs = 32609) %>% 
   # simplify df columns
-  select(survey_id, trip_id, fishing_event_id, 
+  select(survey_id, trip_id, fishing_event_id, survey_abbrev,
          year, month, day, latitude, longitude, X, Y,
          depth_m, log_depth,
          species_code, species_common_name, 
          catch_weight, catch_count,
          density_kgkm2, density_pcpm2, density_ppkm2, 
-         # area_swept1, area_swept2, doorspread_m, speed_mpm, duration_min, 
-         # tow_length_m,
-         area_swept, area_swept_km2, log_area_km2, hook_count, time_deployed) %>%
+         area_swept, offset, hook_count, time_deployed) %>%
   # specify factor variables that will be used in models
   mutate(fyear = as.factor(year), 
          region = as.factor(survey_abbrev)) %>%
@@ -82,6 +75,11 @@ arrow <-
   drop_na(area_swept) %>%   # drop empty area swept (no doorspread given)
   drop_na(depth_m)          # drop rows without depths
 
+#hist(log(dat$area_swept / 1e5))  # check that log offset is close to 0
+# Start with arrowtooth from synoptic trawl for now
+arrow <- 
+  filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
+  filter(., species_common_name == 'arrowtooth flounder')
 # What data are missing and are there patterns in the missing data?
 # - For arrowtooth there are no patterns
 # - Area swept: One trip in one year had missing data (15 rows)
@@ -99,19 +97,21 @@ syn_grid <-
 fitted_yrs <- sort(unique(arrow$year))
 nd <- make_grid(syn_grid, years = fitted_yrs) %>% 
   mutate(log_depth = log(depth), 
-         fyear = as.factor(year))
+         fyear = as.factor(year), 
+         region = as.factor(survey))
 
 # Objects used for plotting ----------------------------------------------------
 model_lookup <- 
-  tibble(id = 1:7, 
+  tibble(id = 1:8, 
          desc = c("st = 'rw'", # 6
                   "st IID covariate", # 3
                   "st IID s(year)", # 5
                   "st IID no covariate as.factor year", # 2????
                   "st time_varying RW", # 4
                   "st (1|year)", # 1
-                  "spatial only"),  # 7
-         order = c(6, 3, 5, 2, 4, 1, 7))  # try matching order of the simulated plots
+                  "spatial only",  # 7
+                  "st (1|region)"),  # 8
+         order = c(6, 3, 5, 2, 4, 1, 7, 8))  # try matching order of the simulated plots
 
 # Fit models -------------------------------------------------------------------
 ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
@@ -123,7 +123,7 @@ fit1 <-
     family = tweedie(),
     data = arrow, time = "year", spatiotemporal = "rw", spatial = "on",
     silent = TRUE, mesh = mesh,
-    offset = arrow$log_area_km2,
+    offset = arrow$offset,
     control = ctrl
   )
   beep()
@@ -134,7 +134,7 @@ fit2 <- try(sdmTMB(
     family = tweedie(),
     data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
     silent = TRUE, mesh = mesh,
-    offset = arrow$log_area_km2,
+    offset = arrow$offset,
     control = ctrl
   ))
 
@@ -144,7 +144,7 @@ fit3 <- sdmTMB(
   family = tweedie(),
   data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
   silent = TRUE, mesh = mesh,
-  offset = arrow$log_area_km2,
+  offset = arrow$offset,
   control = ctrl
 )
 beepr::beep()
@@ -155,7 +155,7 @@ fit4 <- sdmTMB(
   family = tweedie(),
   data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
   mesh = mesh,
-  offset = arrow$log_area_km2,
+  offset = arrow$offset,
   control = ctrl
 )
 beepr::beep()
@@ -167,7 +167,7 @@ fit5 <- sdmTMB(
   time_varying = ~1, time_varying_type = "rw",
   data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
   mesh = mesh,
-  offset = arrow$log_area_km2,
+  offset = arrow$offset,
   control = ctrl
 )
 
@@ -177,7 +177,7 @@ fit6 <- sdmTMB(
   family = tweedie(),
   data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
   mesh = mesh,
-  offset = arrow$log_area_km2,
+  offset = arrow$offset,
   control = ctrl
 )
 
@@ -187,22 +187,21 @@ fit7 <- sdmTMB(
   family = tweedie(),
   data = arrow, time = "year", spatiotemporal = "off", spatial = "on",
   mesh = mesh,
-  offset = arrow$log_area_km2,
+  offset = arrow$offset,
   control = ctrl
 )
+beepr::beep()
 
-# ADD: model to with regions???
-# I don't understand things well enough to write this one...
-#
-# cli::cli_inform("Fitting st (1 | region")
-# fit8 <- sdmTMB(
-#   catch_weight ~ 0 + as.factor(year) + (1 | region),
-#   family = tweedie(),
-#   data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-#   mesh = mesh,
-#   offset = arrow$log_area_km2,
-#   control = ctrl
-# )
+cli::cli_inform("Fitting st (1 | region")
+fit8 <- sdmTMB(
+  catch_weight ~ 0 + fyear + region,
+  family = tweedie(),
+  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
+  mesh = mesh,
+  offset = arrow$offset,
+  control = ctrl
+)
+beep()
 
 # Is it of interest to consider what ranges are estimated for the different models
 # given that the gap size is 
@@ -211,7 +210,8 @@ sdmTMB:::print_range(fit2)
 sdmTMB:::print_range(fit3)
 
 # Predict on grid and calculate indices ----------------------------------------
-fits <- list(fit1, fit2, fit3, fit4, fit5, fit6, fit7)
+fits <- list(fit1, fit2, fit3, fit4, fit5, fit6, fit7, fit8)
+
 
 preds <-  
   purrr::map(fits, function(.x) {
