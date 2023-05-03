@@ -1,18 +1,24 @@
 # Test model on survey data
-fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
+fit_models <- function(
+    dat, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(), 
+    ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
   if (is.null(data_subset)) {
     data_subset <- unique(dat$species_common_name)
   }
+  if (is.null(mesh)) {
+    message(cat("\tNo mesh provided, making mesh with cutoff:", cutoff, "\n"))
+    mesh <- make_mesh(dat, c("X", "Y"), cutoff = 20)
+  }
+
+  dat <- droplevels(dat)  # drop extra factor levels before running models
   fits <- list()
   i <- 1
-  
-  ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
   cli::cli_inform("\tFitting st = 'rw'")
   fit1 <- try(
     sdmTMB(
       catch_weight ~ 1,
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "rw", spatial = "on",
       silent = TRUE, mesh = mesh,
       offset = dat$offset,
@@ -27,7 +33,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit2 <- try(
     sdmTMB(
       catch_weight ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       silent = TRUE, mesh = mesh,
       offset = dat$offset,
@@ -42,7 +48,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit3 <- try(
     sdmTMB(
       catch_weight ~ s(year),
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       silent = TRUE, mesh = mesh,
       offset = dat$offset,
@@ -57,7 +63,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit4 <- try(
     sdmTMB(
       catch_weight ~ 0 + as.factor(year),
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
       offset = dat$offset,
@@ -72,7 +78,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit5 <- try(
     sdmTMB(
       catch_weight ~ 0,
-      family = tweedie(),
+      family = family,
       time_varying = ~1, time_varying_type = "rw",
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
@@ -88,7 +94,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit6 <- try(
     sdmTMB(
       catch_weight ~ 1 + (1 | fyear),
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
       offset = dat$offset,
@@ -103,7 +109,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit7 <- try(
     sdmTMB(
       catch_weight ~ 0 + as.factor(year),
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "off", spatial = "on",
       mesh = mesh,
       offset = dat$offset,
@@ -118,7 +124,7 @@ fit_models <- function(dat, data_subset = NULL, mesh, family = tweedie(), ctrl =
   fit8 <- try(
     sdmTMB(
       catch_weight ~ 0 + fyear + region,
-      family = tweedie(),
+      family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
       offset = dat$offset,

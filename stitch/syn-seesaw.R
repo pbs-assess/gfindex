@@ -111,9 +111,6 @@ arrow <-
 # - Area swept: One trip in one year had missing data (15 rows)
 # - Depth: 17 rows are missing; 12 of these are from 2010, the rest are scattered throughout
 
-# Species-specific mesh --------------------------------------------------------
-mesh <- make_mesh(arrow, c("X", "Y"), cutoff = 20)
-
 # Inputs for predictions and index calcluations --------------------------------
 fitted_yrs <- sort(unique(arrow$year))
 
