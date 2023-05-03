@@ -135,6 +135,5 @@ fit_models <- function(
   model_ids <- c(model_ids, i)
 
   names(fits) <- paste(model_ids, data_subset, sep = ":")
-  fits <- enframe(fits)
   return(fits)
 }
