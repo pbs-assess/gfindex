@@ -111,13 +111,30 @@ arrow <-
 # - Area swept: One trip in one year had missing data (15 rows)
 # - Depth: 17 rows are missing; 12 of these are from 2010, the rest are scattered throughout
 
+arrow_no2014 <- 
+  filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
+  filter(., species_common_name == 'arrowtooth flounder') %>% 
+  filter(year != 2014)
+
+bocaccio <- 
+  filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
+  filter(., species_common_name == 'bocaccio')
+
 # Inputs for predictions and index calcluations --------------------------------
 fitted_yrs <- sort(unique(arrow$year))
 
+fitted_yrs <- sort(unique(bocaccio$year))
+fitted_yrs <- sort(unique(arrow_no2014$year))
+nd <- 
+  make_grid(syn_grid, years = fitted_yrs) %>% 
+  mutate(fyear = as.factor(year))
 
 # Fit models -------------------------------------------------------------------
 ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
+bocaccio_mesh <- make_mesh(bocaccio, c("X", "Y"), cutoff = 20)
+plot(bocaccio_mesh)
+bocaccio_fits <- fit_models(bocaccio)
 beep()
 
 # Is it of interest to consider what ranges are estimated for the different models
@@ -125,8 +142,13 @@ beep()
 sdmTMB:::print_range(fit1)
 sdmTMB:::print_range(fit2)
 sdmTMB:::print_range(fit3)
+arrow_no2014_fits <- fit_models(dat = arrow_no2014, data_subset = "arrowtooth - 2014 removed")
+beep()
 
 # Predict on grid and calculate indices ----------------------------------------
+preds <- get_pred_list(fit_list = arrow_no2014_fits, newdata = nd)
+indices <- get_index_list(pred_list = preds)
+beep()
 
 preds <-  
   purrr::map(fits, function(.x) {
@@ -148,19 +170,20 @@ indices <-
 beep()
 
 index_df <- 
-  bind_rows(indices, .id = "id") %>% 
+  enframe(indices) %>% 
+  unnest(col = "value") %>% 
+  separate(col = 'name', into = c('id', 'species')) %>% 
   mutate(id = as.numeric(id)) %>% 
   as_tibble() %>% 
-  left_join(., model_lookup) %>% 
+  right_join(., model_lookup) %>% 
   # Add this for quick and dirty north/south, but note that WCVI data from 2021
   # was in this arrow dataset used. 
-  mutate(sampled_region = ifelse(year %% 2 == 1, "north", "south"))
+  mutate(odd_even = ifelse(year %% 2 == 0, "even", "odd"))
 
 # Plot index over time ---------------------------------------------------------
 ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) + 
-  geom_pointrange(aes(colour = sampled_region)) +
+  geom_pointrange(aes(colour = odd_even)) +
   geom_ribbon(alpha = 0.20, colour = NA) +
-  scale_colour_manual(values = c("#66C2A5", "#FC8D62")) + 
+  scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) + 
   labs(colour = "Sampled region") + 
-  facet_wrap(~ fct_reorder(desc, order), nrow = 1L)
-
+  facet_wrap(~ fct_reorder(desc, order), nrow = 1L, scales = "free_y")
