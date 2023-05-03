@@ -121,91 +121,6 @@ fitted_yrs <- sort(unique(arrow$year))
 # Fit models -------------------------------------------------------------------
 ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
-cli::cli_inform("Fitting st = 'rw'")
-fit1 <- 
-  sdmTMB(
-    catch_weight ~ 1,
-    family = tweedie(),
-    data = arrow, time = "year", spatiotemporal = "rw", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    offset = arrow$offset,
-    control = ctrl
-  )
-  beep()
-
-cli::cli_inform("Fitting st IID covariate")
-fit2 <- try(sdmTMB(
-    catch_weight ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
-    family = tweedie(),
-    data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-    silent = TRUE, mesh = mesh,
-    offset = arrow$offset,
-    control = ctrl
-  ))
-
-cli::cli_inform("Fitting st IID s(year)")
-fit3 <- sdmTMB(
-  catch_weight ~ s(year),
-  family = tweedie(),
-  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-  silent = TRUE, mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
-beepr::beep()
-
-cli::cli_inform("Fitting st IID no covariate as.factor year")
-fit4 <- sdmTMB(
-  catch_weight ~ 0 + as.factor(year),
-  family = tweedie(),
-  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-  mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
-beepr::beep()
-
-cli::cli_inform("Fitting st time_varying RW")
-fit5 <- sdmTMB(
-  catch_weight ~ 0,
-  family = tweedie(),
-  time_varying = ~1, time_varying_type = "rw",
-  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-  mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
-
-cli::cli_inform("Fitting st (1|year)")
-fit6 <- sdmTMB(
-  catch_weight ~ 1 + (1 | fyear),
-  family = tweedie(),
-  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-  mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
-
-cli::cli_inform("Fitting spatial only")
-fit7 <- sdmTMB(
-  catch_weight ~ 0 + as.factor(year),
-  family = tweedie(),
-  data = arrow, time = "year", spatiotemporal = "off", spatial = "on",
-  mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
-beepr::beep()
-
-cli::cli_inform("Fitting st (1 | region")
-fit8 <- sdmTMB(
-  catch_weight ~ 0 + fyear + region,
-  family = tweedie(),
-  data = arrow, time = "year", spatiotemporal = "iid", spatial = "on",
-  mesh = mesh,
-  offset = arrow$offset,
-  control = ctrl
-)
 beep()
 
 # Is it of interest to consider what ranges are estimated for the different models
@@ -215,8 +130,6 @@ sdmTMB:::print_range(fit2)
 sdmTMB:::print_range(fit3)
 
 # Predict on grid and calculate indices ----------------------------------------
-fits <- list(fit1, fit2, fit3, fit4, fit5, fit6, fit7, fit8)
-
 
 preds <-  
   purrr::map(fits, function(.x) {
