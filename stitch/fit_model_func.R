@@ -137,3 +137,29 @@ fit_models <- function(
   names(fits) <- paste(model_ids, data_subset, sep = ":")
   return(fits)
 }
+
+# is_even <- function(column) {
+#   ifelse({{column}} %% 2 == 0, TRUE, FALSE)
+# }
+
+# -------
+get_pred_list <- function(fit_list, newdata) 
+  fit_list %>% 
+  purrr::map(., function(.x) {
+    if (inherits(.x, "sdmTMB")) {
+      out <- predict(.x, newdata = newdata, return_tmb_object = TRUE)
+    } else {
+      out <- NA
+    }
+    out
+  })
+
+get_index_list <- function(pred_list) {
+  purrr::map(pred_list, function(.x) {
+    if (length(.x) > 1) {
+      get_index(.x, bias_correct = TRUE)
+    } else {
+      out <- NA  # keep empty fits as visual cue that these did not fit when plotting
+    }
+  })
+}
