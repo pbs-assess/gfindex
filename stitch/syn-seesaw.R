@@ -49,6 +49,26 @@ theme_set(mytheme())
 
 # Data preparations
 # ------------------------------------------------------------------------------
+# Specify model order and labels for plotting ----------------------------------
+model_lookup <- 
+  tibble(id = 1:8, 
+         desc = c("st = 'rw'", # 6
+                  "st IID covariate", # 3
+                  "st IID s(year)", # 5
+                  "st IID no covariate as.factor year", # 2????
+                  "st time_varying RW", # 4
+                  "st (1|year)", # 1
+                  "spatial only",  # 7
+                  "st (1|region)"),  # 8
+         order = c(6, 3, 5, 2, 4, 1, 7, 8))  # try matching order of the simulated plots
+
+# Prepare grids ----------------------------------------------------------------
+syn_grid <- 
+  gfplot::synoptic_grid %>%
+  tibble() %>%  # because I accidentally print the full df too often
+  dplyr::select(-survey_series_name, -utm_zone, -survey_domain_year) %>% 
+  mutate(log_depth = log(depth), region = as.factor(survey))
+
 # Clean survey data ------------------------------------------------------------
 dat <- 
   readRDS(here::here('data/all_surv_catch.rds')) %>%  # What was the code that actually made this (from SOPO)
@@ -95,29 +115,8 @@ arrow <-
 mesh <- make_mesh(arrow, c("X", "Y"), cutoff = 20)
 
 # Inputs for predictions and index calcluations --------------------------------
-syn_grid <- 
-  gfplot::synoptic_grid %>%
-  tibble() %>%  # because I accidentally print the full df too often
-  dplyr::select(-survey_series_name, -utm_zone, -survey_domain_year)
-
 fitted_yrs <- sort(unique(arrow$year))
-nd <- make_grid(syn_grid, years = fitted_yrs) %>% 
-  mutate(log_depth = log(depth), 
-         fyear = as.factor(year), 
-         region = as.factor(survey))
 
-# Objects used for plotting ----------------------------------------------------
-model_lookup <- 
-  tibble(id = 1:8, 
-         desc = c("st = 'rw'", # 6
-                  "st IID covariate", # 3
-                  "st IID s(year)", # 5
-                  "st IID no covariate as.factor year", # 2????
-                  "st time_varying RW", # 4
-                  "st (1|year)", # 1
-                  "spatial only",  # 7
-                  "st (1|region)"),  # 8
-         order = c(6, 3, 5, 2, 4, 1, 7, 8))  # try matching order of the simulated plots
 
 # Fit models -------------------------------------------------------------------
 ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
