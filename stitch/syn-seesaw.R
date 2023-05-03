@@ -187,3 +187,54 @@ ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
   scale_colour_manual(values = c("#66C2A5", "#FC8D62"), na.translate = FALSE) + 
   labs(colour = "Sampled region") + 
   facet_wrap(~ fct_reorder(desc, order), nrow = 1L, scales = "free_y")
+
+# What about MRE, RMSE, see-saw, coverage etc. ? --------------------------
+seesaw_metrics <- 
+  index_df %>% 
+    group_by(id, species, desc, order, odd_even) %>% 
+    summarise(mean_est = mean(est)) %>%  # should this be log estimate? but then log ratio of log???
+    pivot_wider(names_from = odd_even, values_from = mean_est) %>% 
+    select(-`NA`) %>% 
+    mutate(log_ratio = log(even / odd)) %>% 
+    mutate(seesaw_index = abs(log_ratio)) %>% 
+    left_join(., 
+      index_df %>%   # add mean_se per time-series
+      group_by(id, species, desc, order) %>% 
+      summarise(mean_se = mean(se))) %>% 
+    ungroup()
+
+seesaw_metrics
+       # mre = mean(log_ratio),  # I don't know if this metric makes sense to keep/use?
+       # rmse = sqrt(mean(log_ratio^2)),  # Nor this one?
+       #coverage = mean(total < upr & total > lwr))  # or this one?
+
+seesaw_metrics %>% 
+  arrange(seesaw_index) |>
+    mutate(desc = forcats::fct_reorder(as.factor(desc), rev(seesaw_index), .na_rm = FALSE)) |>
+    tidyr::pivot_longer(cols = c(log_ratio, seesaw_index, mean_se), names_to = "metric") |>
+    mutate(metric = factor(metric,
+      levels = c('seesaw_index', 'mean_se', 'log_ratio'))) |>
+      #levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage"))) |>
+    ggplot(aes(value, desc)) +
+    geom_point(pch = 21, size = 1.6) +
+    facet_wrap(~metric, scales = "free_x", nrow = 1L) +
+    ggsidekick::theme_sleek() +
+    theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
+    xlab("Metric value")
+
+
+# TODO: RERUN arrow and bocaccio with above and check with and without 2014
+# TODO: setup functions to produce plots
+# TODO: get best HBLL grids; start with inside HBLL and use quillback and see 
+#       what output looks likeindexes_df |>
+  left_join(actual) |>
+  left_join(select(d, year, sampled_region) %>% distinct()) |>
+  group_by(model) |>
+  mutate(log_residual = log(total) - log(est)) |>
+  summarise(
+    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) - mean(log_residual[sampled_region == "south"])),
+    mre = mean(log_residual),
+    rmse = sqrt(mean(log_residual^2)),
+    mean_se = mean(se),
+    coverage = mean(total < upr & total > lwr)
+  )
