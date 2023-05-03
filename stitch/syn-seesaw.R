@@ -106,10 +106,6 @@ survey_region_baseplot +
 arrow <- 
   filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
   filter(., species_common_name == 'arrowtooth flounder')
-# What data are missing and are there patterns in the missing data?
-# - For arrowtooth there are no patterns
-# - Area swept: One trip in one year had missing data (15 rows)
-# - Depth: 17 rows are missing; 12 of these are from 2010, the rest are scattered throughout
 
 arrow_no2014 <- 
   filter(dat, str_detect(survey_abbrev, "SYN")) %>% 
@@ -122,7 +118,6 @@ bocaccio <-
 
 # Inputs for predictions and index calcluations --------------------------------
 fitted_yrs <- sort(unique(arrow$year))
-
 fitted_yrs <- sort(unique(bocaccio$year))
 fitted_yrs <- sort(unique(arrow_no2014$year))
 nd <- 
@@ -130,43 +125,17 @@ nd <-
   mutate(fyear = as.factor(year))
 
 # Fit models -------------------------------------------------------------------
-ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
-
 bocaccio_mesh <- make_mesh(bocaccio, c("X", "Y"), cutoff = 20)
 plot(bocaccio_mesh)
 bocaccio_fits <- fit_models(bocaccio)
 beep()
 
-# Is it of interest to consider what ranges are estimated for the different models
-# given that the gap size is 
-sdmTMB:::print_range(fit1)
-sdmTMB:::print_range(fit2)
-sdmTMB:::print_range(fit3)
 arrow_no2014_fits <- fit_models(dat = arrow_no2014, data_subset = "arrowtooth - 2014 removed")
 beep()
 
 # Predict on grid and calculate indices ----------------------------------------
 preds <- get_pred_list(fit_list = arrow_no2014_fits, newdata = nd)
 indices <- get_index_list(pred_list = preds)
-beep()
-
-preds <-  
-  purrr::map(fits, function(.x) {
-    if (inherits(.x, "sdmTMB")) {
-      out <- predict(.x, newdata = nd, return_tmb_object = TRUE)
-    } else {
-      out <- NA
-    }
-    out
-  })
-beep()
-
-indices <- 
-  purrr::map(preds, function(.x) {
-    if (length(.x) > 1) {
-      get_index(.x, bias_correct = TRUE)
-    }
-  })
 beep()
 
 index_df <- 
@@ -226,7 +195,17 @@ seesaw_metrics %>%
 # TODO: RERUN arrow and bocaccio with above and check with and without 2014
 # TODO: setup functions to produce plots
 # TODO: get best HBLL grids; start with inside HBLL and use quillback and see 
-#       what output looks likeindexes_df |>
+#       what output looks like
+
+
+# Is it of interest to consider what ranges are estimated for the different models
+# given that the gap size is 
+sdmTMB:::print_range(fit1)
+sdmTMB:::print_range(fit2)
+sdmTMB:::print_range(fit3)
+
+
+indexes_df |>
   left_join(actual) |>
   left_join(select(d, year, sampled_region) %>% distinct()) |>
   group_by(model) |>
