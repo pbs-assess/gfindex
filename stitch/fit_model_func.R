@@ -176,3 +176,12 @@ get_index_list <- function(pred_list, area = 1) {
     }
   })
 }
+
+mk_index_df <- function(index_list) {
+  enframe(index_list) %>% 
+  unnest(col = "value") %>% 
+  separate(col = 'name', into = c('id', 'species'), sep = ":") %>% 
+  mutate(id = as.numeric(id)) %>% 
+  right_join(., model_lookup) %>% 
+  mutate(odd_even = ifelse(year %% 2 == 0, "even", "odd"))
+}
