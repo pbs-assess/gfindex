@@ -8,13 +8,18 @@ check_sanity <- function(x) {
 }
 
 fit_models <- function(
-    dat, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(), 
+    dat, catch, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(), 
+    offset = NULL, 
     ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
+
   if (is.null(data_subset)) {
     data_subset <- unique(dat$species_common_name)
   }
+
+  message(cat("\tFitting models for data subset:", data_subset, "\n"))
+
   if (is.null(mesh)) {
-    message(cat("\tNo mesh provided, making mesh with cutoff:", cutoff, "\n"))
+    message(cat("\n\tNo mesh provided, making mesh with cutoff:", cutoff, "\n"))
     mesh <- make_mesh(dat, c("X", "Y"), cutoff = 20)
   }
 
@@ -25,11 +30,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st = 'rw'")
   fit1 <- try(
     sdmTMB(
-      catch_weight ~ 1,
+      eval(parse(text = catch)) ~ 1,
       family = family,
       data = dat, time = "year", spatiotemporal = "rw", spatial = "on",
       silent = TRUE, mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -40,11 +45,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st IID covariate")
   fit2 <- try(
     sdmTMB(
-      catch_weight ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
+      eval(parse(text = catch)) ~ 0 + as.factor(year) + log_depth + I(log_depth^2),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       silent = TRUE, mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -55,11 +60,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st IID s(year)")
   fit3 <- try(
     sdmTMB(
-      catch_weight ~ s(year),
+      eval(parse(text = catch)) ~ s(year),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       silent = TRUE, mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -70,11 +75,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st IID no covariate as.factor year")
   fit4 <- try(
     sdmTMB(
-      catch_weight ~ 0 + as.factor(year),
+      eval(parse(text = catch)) ~ 0 + as.factor(year),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -85,12 +90,12 @@ fit_models <- function(
   cli::cli_inform("\tFitting st time_varying RW")
   fit5 <- try(
     sdmTMB(
-      catch_weight ~ 0,
+      eval(parse(text = catch)) ~ 0,
       family = family,
       time_varying = ~1, time_varying_type = "rw",
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -101,11 +106,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st (1|year)")
   fit6 <- try(
     sdmTMB(
-      catch_weight ~ 1 + (1 | fyear),
+      eval(parse(text = catch)) ~ 1 + (1 | fyear),
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -116,11 +121,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting spatial only")
   fit7 <- try(
     sdmTMB(
-      catch_weight ~ 0 + as.factor(year),
+      eval(parse(text = catch)) ~ 0 + as.factor(year),
       family = family,
       data = dat, time = "year", spatiotemporal = "off", spatial = "on",
       mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -131,11 +136,11 @@ fit_models <- function(
   cli::cli_inform("\tFitting st (1 | region)")
   fit8 <- try(
     sdmTMB(
-      catch_weight ~ 0 + fyear + region,
+      eval(parse(text = catch)) ~ 0 + fyear + region,
       family = family,
       data = dat, time = "year", spatiotemporal = "iid", spatial = "on",
       mesh = mesh,
-      offset = dat$offset,
+      offset = offset,
       control = ctrl
     )
   )
@@ -162,10 +167,10 @@ get_pred_list <- function(fit_list, newdata)
     out
   })
 
-get_index_list <- function(pred_list) {
+get_index_list <- function(pred_list, area = 1) {
   purrr::map(pred_list, function(.x) {
     if (length(.x) > 1) {
-      get_index(.x, bias_correct = TRUE)
+      get_index(.x, bias_correct = TRUE, area = area)
     } else {
       out <- NA  # keep empty fits as visual cue that these did not fit when plotting
     }
