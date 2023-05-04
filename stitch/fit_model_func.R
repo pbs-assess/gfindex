@@ -1,4 +1,12 @@
 # Test model on survey data
+check_sanity <- function(x) {
+  if (!all(unlist(sanity(x)))) {
+    return(NA)
+  } else {
+    return(x)
+  }
+}
+
 fit_models <- function(
     dat, data_subset = NULL, mesh = NULL, cutoff = 20, family = tweedie(), 
     ctrl = sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)) {
