@@ -3,7 +3,11 @@ library(ggplot2)
 library(sdmTMB)
 source(here::here("stitch", "utils.R"))
 
-mytheme <- function() ggsidekick::theme_sleek()
+mytheme <- function() ggsidekick::theme_sleek() +
+  theme(panel.grid = element_line(colour = "grey85"),
+  panel.grid.major = element_line(linewidth = rel(0.5)),
+  panel.grid.minor = element_line(linewidth = rel(0.25))
+)
 theme_set(mytheme())
 
 dat <-
@@ -21,7 +25,7 @@ dat <-
 
 sp_dat <-
   filter(dat, stringr::str_detect(survey_abbrev, "SYN")) |>
-  filter(species_common_name == "pacific cod") |>
+  filter(species_common_name == "petrale sole") |>
   # simplify df columns
   select(
     survey_id, trip_id, fishing_event_id,
@@ -43,7 +47,7 @@ sp_dat <-
   tidyr::drop_na(area_swept) |> # drop empty area swept (no doorspread given)
   tidyr::drop_na(depth_m) # drop rows without depths
 
-mesh <- make_mesh(sp_dat, c("X", "Y"), cutoff = 20)
+mesh <- make_mesh(sp_dat, c("X", "Y"), cutoff = 25)
 
 # Inputs for predictions and index calcluations --------------------------------
 syn_grid <-
@@ -91,7 +95,7 @@ cli::cli_inform("Fitting st time_varying RW")
 fit5 <- sdmTMB(
   catch_weight ~ 0,
   family = tweedie(),
-  time_varying = ~1, time_varying_type = "rw",
+  time_varying = ~ 1, time_varying_type = "rw",
   data = sp_dat, time = "year", spatiotemporal = "iid", spatial = "on",
   mesh = mesh,
   offset = "log_area_km2",
@@ -113,7 +117,7 @@ fit9 <- sdmTMB(
 )
 sanity(fit9)
 
-cli::cli_inform("Fitting IID fields, SVC time spline")
+cli::cli_inform("Fitting spatial only, SVC time spline")
 
 sp_dat$present <- as.integer(sp_dat$catch_weight > 0)
 
@@ -148,6 +152,8 @@ fit10 <- sdmTMB(
 )
 sanity(fit10)
 fit10
+
+cli::cli_inform("Fitting IID fields, SVC time spline, RW year")
 
 fit11 <- sdmTMB(
   catch_weight ~ 1 + spline1 + spline2 + spline3,
@@ -216,12 +222,12 @@ model_lookup <-
   tibble(
     id = 1:7,
     desc = c(
-      "st = 'rw'", # 6
-      "st IID covariate", # 3
-      "st IID s(year)", # 5
-      "st IID no covariate as.factor year", # 2????
-      "st time_varying RW", # 4
-      "st (1|year)", # 1
+      "st RW", # 6
+      "st IID, depth covariate", # 3
+      "st IID, s(year)", # 5
+      "st IID, no covariate, as.factor(year)", # 2????
+      "st IID, time-varying RW", # 4
+      "st IID (1|year)", # 1
       "spatial only"
     ), # 7
     order = c(6, 3, 5, 2, 4, 1, 7)
@@ -231,29 +237,43 @@ model_lookup <-
 
 model_lookup <- bind_rows(
   model_lookup,
-  tibble(id = 5, desc = "as.factor(year) RW fields", order = 99),
-  tibble(id = 6, desc = "st fields off, spline SVC", order = 99),
+  tibble(id = 5, desc = "st RW, as.factor(year)", order = 99),
+  tibble(id = 6, desc = "st off, spline SVC", order = 99),
   tibble(id = 7, desc = "st IID spline SVC", order = 99),
-  tibble(id = 8, desc = "st IID, factor survey IDs", order = 99)
-)
+  tibble(id = 8, desc = "st IID, as.factor(year) + as.factor(survey)", order = 99)
+) |>
+  mutate(order = seq_len(n()))
+
+
+reg_lu <-
+  sp_dat |>
+  select(year, survey_abbrev) |>
+  group_by(year) |>
+  summarize(concat_regions = paste(sort(unique(survey_abbrev)), collapse = ", ")) |>
+  mutate(concat_regions = gsub("SYN ", "", concat_regions))
 
 index_df <-
   bind_rows(indices, .id = "id") |>
   mutate(id = as.numeric(id)) |>
   as_tibble() |>
   left_join(model_lookup) |>
+  left_join(reg_lu) |>
   # Add this for quick and dirty north/south, but note that WCVI data from 2021
   # was in this dataset used.
   mutate(sampled_region = if_else(year %% 2 == 1, "north", "south"))
 
 # Plot index over time ---------------------------------------------------------
 ggplot(data = index_df, aes(x = year, y = est, ymin = lwr, ymax = upr)) +
-  geom_pointrange(aes(colour = sampled_region)) +
-  geom_ribbon(alpha = 0.20, colour = NA) +
-  scale_colour_manual(values = c("#66C2A5", "#FC8D62")) +
-  labs(colour = "Sampled region") +
+  # geom_pointrange(aes(colour = sampled_region)) +
+  geom_pointrange(aes(colour = concat_regions)) +
+  geom_ribbon(alpha = 0.15, colour = NA) +
+  # scale_colour_manual(values = c("#66C2A5", "#FC8D62")) +
+  scale_colour_brewer(palette = "Dark2") +
+  # ggthemes::scale_colour_colorblind() +
+  labs(colour = "Sampled region", x = "Year", y = "Index (log distributed)") +
   facet_wrap(~ forcats::fct_reorder(desc, order)) +
-  scale_y_log10()
+  scale_y_log10() +
+  ggtitle(stringr::str_to_title(unique(sp_dat$species_common_name)))
 
 # does using year factor coefs fix it!?
 b <- tidy(fit12, conf.int = TRUE) |> filter(grepl("year", term)) |>
