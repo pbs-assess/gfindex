@@ -14,6 +14,8 @@ fit_models <- function(
 
   if (is.null(data_subset)) {
     data_subset <- unique(dat$species_common_name)
+  } else {
+    data_subset <- unique(dat[[data_subset]])
   }
 
   message(cat("\n\tFitting models for data subset:", data_subset, "\n"))
