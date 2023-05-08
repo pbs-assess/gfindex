@@ -26,7 +26,7 @@ syn_grid <-
   #  Should it be included in gfplot?
 hbll_inside <- 
   readRDS(here::here('grids', 'hbll-inside-grid.rds')) %>% 
-  add_utm_columns() %>% 
+  sdmTMB::add_utm_columns(c("longitude", "latitude"), utm_crs = 32609) %>% 
   select(survey, depth, area, X, Y) %>%  # block looks like a unique spatial id
   mutate(log_depth = log(depth), region = as.factor(survey))
 
