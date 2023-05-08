@@ -44,9 +44,30 @@ sc <- purrr::map(sc, ~ {
 # out20 <- do.call(sim_fit_and_index, c(sc[[11]], .seed = 1, make_plots = FALSE))
 # tictoc::toc()
 
-future::plan(future::multisession, workers = 6L)
+
+# testing first:
+out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -1, .seed = 1, make_plots = T))
+out <- do.call(sim_fit_and_index, c(sc[[1]], svc_trend = -0.6, .seed = 2, make_plots = F))
+
+actual <- select(out, year, total, seed, sampled_region) |>
+  distinct()
+
+ggplot(out, aes(year, est, ymin = lwr, ymax = upr)) +
+  ggsidekick::theme_sleek() +
+  geom_pointrange(aes(colour = sampled_region)) +
+  # geom_line(colour = "grey50") +
+  geom_ribbon(alpha = 0.20, colour = NA) +
+  geom_line(
+    data = actual, mapping = aes(year, total),
+    inherit.aes = FALSE, lty = 2
+  ) +
+  facet_wrap( ~ paste(type, with_depth),
+    scales = "free_y"
+  )
+
+future::plan(future::multisession, workers = 8L)
 tictoc::tic()
-seeds <- seq_len(30L)
+seeds <- seq_len(16L)
 # out_df <- purrr:::map_dfr(seeds[1], function(seed_i) {
 out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
   x <- list()
@@ -60,20 +81,17 @@ out_df <- furrr::future_map_dfr(seeds, function(seed_i) {
 }, .options = furrr::furrr_options(seed = TRUE))
 tictoc::toc()
 out_df2 <- left_join(out_df, lu, by = "label")
-saveRDS(out_df2, "stitch/sawtooth-sim-nov29.rds")
+saveRDS(out_df2, "stitch/sawtooth-sim-may3.rds")
 future::plan(future::sequential)
 
-out_df <- readRDS("stitch/sawtooth-sim-nov29.rds")
-
-# ---------------------------------------------
-# iterate above ....
+out_df <- readRDS("stitch/sawtooth-sim-may3.rds")
 
 # out_df$label <- forcats::fct_inorder(out_df$label)
 
 cols <- RColorBrewer::brewer.pal(3L, "Set2")
 names(cols) <- c("north", "south", "both")
 
-seed_to_plot <- 6
+seed_to_plot <- 4
 actual <- select(out_df, label, year, total, seed, sampled_region) |>
   filter(seed == seed_to_plot) |>
   distinct()
@@ -108,7 +126,7 @@ g <- out_df |>
   scale_y_log10() +
   scale_x_continuous(breaks = function(x) seq(ceiling(x[1]), floor(x[2]), by = 2))
 # print(g)
-ggsave("stitch/figs/saw-tooth-scenarios-nov29-6.pdf", width = 15, height = 24)
+ggsave("stitch/figs/saw-tooth-scenarios-may3-4.pdf", width = 15, height = 24)
 
 # Look at one point in space... -------------------------------------------
 
@@ -167,13 +185,16 @@ temp <- out_df |>
   group_by(label, seed, model) |>
   mutate(log_residual = log(total) - log(est)) |>
   summarise(
-    seesaw_index = abs(mean(log_residual[sampled_region == "north"]) -
-        mean(log_residual[sampled_region == "south"])),
+    seesaw_index1 = abs(mean(log_residual[sampled_region == "north" & year < 7]) -
+        mean(log_residual[sampled_region == "south" & year < 7])),
+    seesaw_index2 = abs(mean(log_residual[sampled_region == "north" & year >= 7]) -
+        mean(log_residual[sampled_region == "south" & year >= 7])),
     mre = mean(log_residual),
     rmse = sqrt(mean(log_residual^2)),
     mean_se = mean(se),
     coverage = mean(total < upr & total > lwr)
   ) |>
+  mutate(seesaw_index = (seesaw_index1 + seesaw_index2) / 2) |>
   tidyr::pivot_longer(cols = -c(model, seed, label), names_to = "metric") |>
   mutate(metric = factor(metric,
     levels = c("seesaw_index", "rmse", "mre", "mean_se", "coverage")
@@ -199,7 +220,7 @@ g <- temp |>
   ggsidekick::theme_sleek() +
   theme(panel.grid.major.y = element_line(colour = "grey90"), axis.title.y.left = element_blank()) +
   xlab("Metric value")
-ggsave("stitch/figs/saw-tooth-metrics-all-dec14.pdf", width = 7, height = 25)
+ggsave("stitch/figs/saw-tooth-metrics-all-May3.pdf", width = 7, height = 25)
 
 # ---------------------------------------------------------------------
 # together in one set of panels?
