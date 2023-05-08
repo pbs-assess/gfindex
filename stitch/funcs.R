@@ -21,7 +21,10 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
                 region_cutoff = 0.5, rho = 0, sigma_E = 0.4, range = 0.8, tweedie_p = 1.6,
                 sigma_O = 1.6, coefs = c(2.2, 3.8), year_mean = 1, north_effect = 0,
                 year_arima.sim = list(ar = 0.8), year_marginal_sd = 0.2,
-                heavy_sd_mult = 1, heavy_sd_frac = 0) {
+                svc_trend = 0,
+                heavy_sd_mult = 1,
+                heavy_sd_frac = 0) {
+
   predictor_grid$region <- NA
   predictor_grid$region[predictor_grid$Y < region_cutoff] <- "south"
   predictor_grid$region[predictor_grid$Y >= region_cutoff] <- "north"
@@ -46,12 +49,39 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
 
   predictor_grid$depth_cov <- predictor_grid$Y
 
+  # visualize SVC trend:
+  # predictor_grid |>
+  #   mutate(year_cent = year - mean(year)) |>
+  #   mutate(Y_cent = Y - mean(Y)) |>
+  #   mutate(mu = Y_cent * year_cent * svc_trend) |>
+  #   ggplot(aes(X, Y, fill = exp(mu))) +
+  #   geom_raster() +
+  #   facet_wrap(~year) +
+  #   scale_fill_viridis_c(trans = "log10") +
+  #   coord_fixed()
+
+  predictor_grid <- predictor_grid |>
+    mutate(year_cent = year - mean(year)) |>
+    mutate(Y_cent = Y - mean(Y))
+
   if (north_effect != 0) {
-    formula <- ~ 0 + as.factor(year) + region
-    B <- c(yrs, north_effect)
+    formula <- ~ 0 + as.factor(year) + region + Y_cent * year_cent
+    B <- c(
+      yrs,
+      north_effect,
+      0, # Y_cent
+      0, # year_cent
+      svc_trend # Y_cent:year_cent
+    )
   } else {
-    formula <- ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2)
-    B <- c(yrs, coefs)
+    formula <- ~ 0 + as.factor(year) + depth_cov + I(depth_cov^2) + Y_cent * year_cent
+    B <- c(
+      yrs,
+      coefs,
+      0, # Y_cent
+      0, # year_cent
+      svc_trend # Y_cent:year_cent
+    )
   }
 
   sim_dat <- sdmTMB_simulate(
@@ -72,7 +102,7 @@ sim <- function(predictor_grid, mesh, phi = 8, seed = 123,
   sim_dat$region <- predictor_grid$region
   sim_dat$year <- predictor_grid$year
   sim_dat$depth_cov <- predictor_grid$depth_cov
-  list(sim_dat = sim_dat, predictor_dat = predictor_grid, year_effects = yrs, coefs = coefs)
+  list(sim_dat = sim_dat, predictor_dat = predictor_grid, year_effects = yrs, coefs = coefs, B = B)
 }
 
 # sample_before_split = TRUE means apply sample_n first, then discard any gap
@@ -133,6 +163,7 @@ sim_fit_and_index <- function(n_year,
                               range = 0.5,
                               sigma_O = 1,
                               sigma_E = 0.5,
+                              svc_trend = 0,
                               heavy_sd_mult = 1,
                               heavy_sd_frac = 0,
                               sample_before_split = FALSE,
@@ -159,6 +190,7 @@ sim_fit_and_index <- function(n_year,
     coefs = sim_coefs, sigma_E = sigma_E,
     heavy_sd_mult = heavy_sd_mult,
     heavy_sd_frac = heavy_sd_frac,
+    svc_trend = svc_trend,
     north_effect = 0, sigma_O = sigma_O
   )
   sim_dat <- x$sim_dat
@@ -255,7 +287,7 @@ sim_fit_and_index <- function(n_year,
   ctl <- sdmTMBcontrol(nlminb_loops = 1L, newton_loops = 1L)
 
   check_sanity <- function(x) {
-    if (!all(unlist(sanity(x)))) {
+    if (!all(unlist(sanity(x, gradient_thresh = 0.01)))) {
       return(NA)
     } else {
       return(x)
@@ -368,6 +400,42 @@ sim_fit_and_index <- function(n_year,
   i <- i + 1
   nms <- c(nms, "Spatial only")
 
+  cli::cli_inform("Fitting SVC trend model")
+
+  mean_year <- mean(d$year)
+  d$year_cent <- d$year - mean_year
+  fits[[i]] <- sdmTMB(
+    observed ~ 0 + as.factor(year),
+    family = tweedie(),
+    data = d, time = "year",
+    spatiotemporal = "iid",
+    spatial = "on",
+    spatial_varying = ~ 0 + year_cent,
+    mesh = mesh,
+    priors = priors,
+    control = ctl
+  )
+  fits[[i]] <- check_sanity(fits[[i]])
+  i <- i + 1
+  nms <- c(nms, "SVC trend, IID fields")
+
+  cli::cli_inform("Fitting SVC trend model without ST fields")
+
+  fits[[i]] <- sdmTMB(
+    observed ~ 0 + as.factor(year),
+    family = tweedie(),
+    data = d, time = "year",
+    spatiotemporal = "off",
+    spatial = "on",
+    spatial_varying = ~ 0 + year_cent,
+    mesh = mesh,
+    priors = priors,
+    control = ctl
+  )
+  fits[[i]] <- check_sanity(fits[[i]])
+  i <- i + 1
+  nms <- c(nms, "SVC trend, spatial only")
+
   names(fits) <- nms
 
   # Predict on grid and calculate indexes -----------------------------------
@@ -375,6 +443,7 @@ sim_fit_and_index <- function(n_year,
   cli::cli_alert_success("Calculating indices...")
   nd <- select(predictor_dat, X, Y, year, fyear, region)
   nd$depth_cov <- nd$Y
+  nd$year_cent <- nd$year - mean_year
 
   nd
 
