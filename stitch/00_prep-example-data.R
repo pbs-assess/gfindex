@@ -30,6 +30,20 @@ hbll_inside <-
   select(survey, depth, area, X, Y) %>%  # block looks like a unique spatial id
   mutate(log_depth = log(depth), region = as.factor(survey))
 
+hbll_n_grid  <- 
+  gfplot::hbll_n_grid$grid %>% 
+  mutate(survey = "HBLL OUT N")
+hbll_s_grid  <- 
+  gfplot::hbll_s_grid$grid %>%
+  mutate(survey = "HBLL OUT S")
+
+hbll_outside <- bind_rows(hbll_n_grid, hbll_s_grid) %>% 
+  as_tibble() %>% 
+  rename(longitude = "X", latitude = "Y") %>% 
+  add_utm_columns(c("longitude", "latitude"), utm_crs = 32609) %>% 
+  mutate(log_depth = log(depth), region = as.factor(survey)) %>% 
+  mutate(area = 4)  # CHECK ME: area of hbll outside should be 4?
+
 # Clean survey data ------------------------------------------------------------
 dat <- 
   readRDS(here::here('data/all_surv_catch.rds')) %>%  # What was the code that actually made this (from SOPO)
