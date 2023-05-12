@@ -474,7 +474,7 @@ ggplot(pd, aes(exp(log_depth), exp(est),
 <!-- Load grid -->
 
 ```{r load-grid, message=FALSE, warning=FALSE}
-nd <- readRDS(here("grids/synoptic_grid.rds")) %>%
+nd <- readRDS(here::here("grids/synoptic_grid.rds")) %>%
   filter(survey == region)
 
 model_ssid <- data$survey_series_id[1]
