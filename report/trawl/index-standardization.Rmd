@@ -1,11 +1,12 @@
 ---
-title: "`r params$region` `r stringr::str_to_title(params$species)` `r stringr::str_to_title('geostatistical index standardization')`"
+title: "`r params$region` `r stringr::str_to_title(params$species)` `r stringr::str_to_title('geostatistical index standardization')` `r params$extra_title`"
 author: ""
 date: "`r Sys.Date()`"
 output:
   bookdown::html_document2:
      number_sections: false
 params:
+    input_data: "`r NULL`"
     species: "Canary Rockfish"
     region: "SYN WCVI"
     covariate_type: "with depth" # or "no depth"
@@ -18,6 +19,7 @@ params:
     cutoff: 10 # minimum triangle length for most surveys
     cutoff_wchg: 7 # minimum triangle length for WCHG survey
     starr_mode: TRUE # if TRUE, plot indexes as dots and lines instead of lines and ribbons
+    extra_title: ""
 ---
 
 ```{r global_options, include=FALSE}
@@ -48,7 +50,7 @@ dir.create(here("figs"), showWarnings = FALSE)
 
 ```{r assertions}
 stopifnot(params$covariate_type %in% c("with depth", "no depth"))
-stopifnot(params$region %in% c("SYN WCHG", "SYN QCS", "SYN HS", "SYN WCVI"))
+stopifnot(params$region %in% c("SYN WCHG", "SYN QCS", "SYN HS", "SYN WCVI", "HBLL OUT S", "HBLL OUT S", "IPHC"))
 stopifnot(is.character(params$species))
 stopifnot(is.numeric(params$cutoff))
 stopifnot(is.numeric(params$cutoff_wchg))
@@ -132,16 +134,23 @@ The following settings were used:
 ```{r dat}
 spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
 
-data <- readRDS(here("data/all-survey-sets-2021-select.rds")) %>%
+if (is.null(params$input_data)) {
+  dat <- readRDS(here::here("data/all-survey-sets-2021-select.rds"))
+} else {
+  dat <- params$input_data
+}
+data <- dat %>%
   filter(species_common_name == tolower(species)) %>%
   filter(survey_abbrev %in% region)
 
 # change from per m2 to per km2:
 data$density <- data[["density_kgpm2"]] * 1000000
 data$log_depth <- log(data$depth_m)
-data$area_swept1 <- data$doorspread_m * (data$speed_mpm * data$duration_min)
-data$area_swept2 <- data$tow_length_m * data$doorspread_m
-data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
+if (!"area_swept" %in% names(data)) {
+  data$area_swept1 <- data$doorspread_m * (data$speed_mpm * data$duration_min)
+  data$area_swept2 <- data$tow_length_m * data$doorspread_m
+  data$area_swept <- ifelse(!is.na(data$area_swept2), data$area_swept2, data$area_swept1)
+}
 # data$area_swept <- data$area_swept2
 
 data <- dplyr::filter(data, !is.na(area_swept)) # should be captured by above line
@@ -216,7 +225,7 @@ plot_multiyear_survey_sets <- function(dat, survey_abbrev,
 data %>%
   arrange(-density) %>%
   plot_multiyear_survey_sets(., region)
-data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
+# data <- dplyr::filter(data, !(year == 2014 & survey_abbrev == "SYN WCHG")) # not used
 ```
 
 <!-- Make mesh -->
@@ -531,7 +540,7 @@ i <- i %>% mutate(
   model = covariate_type,
   max_grad = max(m$gradients)
 )
-saveRDS(i, here(paste0("indices/i-", spp, "-", ssid_string, "-", covariate_type, ".rds")))
+saveRDS(i, here(paste0("indices/index-", spp, "-", ssid_string, "-", covariate_type, "-", params$extra_title, ".rds")))
 ```
 
 <!-- Map predictions -->

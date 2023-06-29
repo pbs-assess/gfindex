@@ -20,23 +20,25 @@ render_separately <- function(...) {
   )
 }
 
-fit_index <- function(region, species, covariate_type) {
+fit_index <- function(region, species, covariate_type, data = NULL, extra_title = "") {
   spp <- gsub(" ", "-", gsub("\\/", "-", tolower(species)))
   region_name <- region
   try({
     render_separately("report/trawl/index-standardization.Rmd",
       params = list(
+        input_data = data,
         species = species,
         region = region,
         covariate_type = covariate_type,
         update_model = TRUE,
         update_index = TRUE,
-        silent = TRUE
+        silent = TRUE,
+        extra_title = extra_title
       ),
       output_file = paste0(
         spp, "-",
         gsub(" ", "-", gsub("\\/", "-", covariate_type)), "-",
-        gsub(" ", "-", gsub("\\/", "-", region_name)), ".html"
+        gsub(" ", "-", gsub("\\/", "-", region_name)), extra_title, ".html"
       )
     )
   })
