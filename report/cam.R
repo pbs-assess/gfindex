@@ -42,14 +42,14 @@ filter_matures <- function(spp_hyphen = "pacific-cod", maturity_type = "Mature")
 }
 
 # matures:
-spp <- c(
+spp_mat <- c(
   "pacific-cod", "north-pacific-spiny-dogfish", "big-skate",
   "longnose-skate", "yellowtail-rockfish", "canary-rockfish",
   "arrowtooth-flounder"
 )
 
 purrr::walk(
-  spp, function(x) {
+  spp_mat, function(x) {
     d <- filter_matures(x)
     fit_index(
       region = "SYN WCVI",
@@ -63,12 +63,12 @@ purrr::walk(
 )
 
 # immatures:
-spp <- c(
+spp_imm <- c(
   "lingcod"
 )
 
 purrr::walk(
-  spp, function(x) {
+  spp_imm, function(x) {
     d <- filter_matures(x, maturity_type = "Immature")
     fit_index(
       region = "SYN WCVI",
@@ -88,7 +88,8 @@ get_design_index <- function(spp_hyphen) {
   d
 }
 
-dat <- purrr::map_dfr(c("big-skate", "lingcod", "longnose-skate"), get_design_index)
+spp_hbll <- c("big-skate", "lingcod", "longnose-skate")
+dat <- purrr::map_dfr(spp_hbll, get_design_index)
 table(dat$species_common_name)
 
 saveRDS(dat, "report/hbll-indexes.rds")
@@ -132,8 +133,67 @@ series_ABCD_full$full_coast
 series_ABCD_full$ser_longest
 saveRDS(series_ABCD_full$ser_longest, "report/iphc-longnose-skate-20.rds")
 
+i <- list()
+i[[1]] <- readRDS("report/iphc-big-skate-20.rds") |>
+  select(year, est = I_t20SampleMean, lwr = I_t20BootLow, upr = I_t20BootHigh) |>
+  mutate(species = "big skate", survey_abbrev = "IPHC 20", maturity = "all")
+i[[2]] <- readRDS("report/iphc-longnose-skate-20.rds") |>
+  select(year, est = I_t20SampleMean, lwr = I_t20BootLow, upr = I_t20BootHigh) |>
+  mutate(species = "longnose skate", survey_abbrev = "IPHC 20", maturity = "all")
+i[[3]] <- readRDS("report/iphc-halibut-20.rds") |>
+  select(year, est = I_t20SampleMean, lwr = I_t20BootLow, upr = I_t20BootHigh) |>
+  mutate(species = "pacific halibut", survey_abbrev = "IPHC 20", maturity = "all")
 
-iphd <- readRDS("")
+spp1 <- c("pacific-cod", "north-pacific-spiny-dogfish", "yellowtail-rockfish", "canary-rockfish", "arrowtooth-flounder"
+)
+for (j in seq_along(spp1)) {
+  i[[length(i) + j]] <- readRDS(paste0("indices/index-", spp1[j], "--no-depth-(mature only).rds")) |> select(year, est, lwr, upr, species, survey_abbrev = survey) |>
+    mutate(maturity = "mature only")
+}
+
+spp2 <- c("big-skate", "longnose-skate")
+for (j in seq_along(spp2)) {
+  i[[length(i) + j]] <- readRDS(paste0("indices/index-", spp2[j], "--no-depth-.rds")) |> select(year, est, lwr, upr, species, survey_abbrev = survey) |>
+    mutate(maturity = "all")
+}
+
+spp3 <- c("lingcod")
+for (j in seq_along(spp3)) {
+  i[[length(i) + j]] <- readRDS(paste0("indices/index-", spp3[j], "--no-depth-(immature only).rds")) |> select(year, est, lwr, upr, species, survey_abbrev = survey) |>
+    mutate(maturity = "immature only")
+}
+
+temp <- readRDS("report/hbll-indexes.rds") |>
+  select(year, est = biomass, lwr = lowerci, upr = upperci, survey_abbrev, species = species_common_name) |>
+  mutate(maturity = "all")
+
+i[[length(i) + 1]] <- temp
+
+ind <- bind_rows(i)
+
+library(ggplot2)
+ggplot(ind, aes(year, est, ymin = lwr, ymax = upr)) + geom_line() +
+  geom_ribbon(alpha = 0.5) +
+  facet_wrap(~paste(species, "\n", survey_abbrev, "\n", maturity), scales = "free_y") +
+  theme_light()
+ggsave("indices-cam.pdf", width = 10, height = 7)
+saveRDS(ind, file = "indices-cam.rds")
+
+
+
+
+# f <- c(
+#   "index-arrowtooth-flounder--no-depth-(mature only).rds",
+#   "index-big-skate--no-depth-.rds",
+#   "index-canary-rockfish--no-depth-(mature only).rds",
+#   "index-lingcod--no-depth-(immature only).rds",
+#   "index-longnose-skate--no-depth-.rds",
+#   "index-north-pacific-spiny-dogfish--no-depth-(mature only).rds",
+#   "index-pacific-cod--no-depth-(mature only).rds",
+#   "index-yellowtail-rockfish--no-depth-(mature only).rds")
+
+
+
 
 # fake hbll as synoptic trawl:
 #
